@@ -18,6 +18,7 @@ function RelicView.forOwner(specimen)
 		security = if specimen.registered then "Registered" else "Unsecured",
 		appraisal = if specimen.appraised then "Appraised" else "Unappraised",
 		activation = if specimen.activated then "Active" else "Needs activation",
+		service = if specimen.needsService then "Needs service" else "Good condition",
 	}
 
 	if specimen.appraised then

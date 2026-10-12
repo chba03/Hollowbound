@@ -2,12 +2,13 @@
 	Server-memory store of every specimen and every player's carried relics.
 
 	This module uses no Roblox services so its rules can be self-tested in isolation.
-	Milestone 1 keeps everything in memory: data is lost when the server shuts down.
+	Everything is kept in memory: data is lost when the server shuts down.
+	Saving between sessions comes in a later milestone.
 
 	Concurrency note: Roblox runs server Luau on one thread. A handler cannot be
 	interrupted unless it yields. claim() checks and claims without yielding, so when
 	two pickup requests arrive together, they run one after the other and only the
-	first one succeeds.
+	first one succeeds. processDeath() and service() also never yield.
 ]]
 
 local RelicStore = {}
@@ -65,6 +66,18 @@ function RelicStore:claim(specimenId: string, userId: number): (boolean, string?
 	return true
 end
 
+local function removeFromInventory(self, userId: number, specimenId: string)
+	local inventory = self.inventories[userId]
+	if not inventory or not inventory.has[specimenId] then
+		return
+	end
+	inventory.has[specimenId] = nil
+	local index = table.find(inventory.order, specimenId)
+	if index then
+		table.remove(inventory.order, index)
+	end
+end
+
 -- Specimens the player carries, in pickup order.
 function RelicStore:carried(userId: number)
 	local list = {}
@@ -98,6 +111,55 @@ function RelicStore:registerCarried(userId: number)
 	return newly, already
 end
 
+-- Final death (Decided). Must not yield.
+--   Unregistered relics leave the inventory and return to the world with no owner, so
+--   anyone, including the previous owner, can claim them. Appraisal and activation stay.
+--   Registered relics stay owned and carried and are marked as needing service.
+-- Calling it again changes nothing: the unregistered relics are already gone, and the
+-- protected ones are already marked.
+-- Returns (dropped, protected) as lists of specimens.
+function RelicStore:processDeath(userId: number, condition: number, charge: number)
+	local dropped, protected = {}, {}
+	for _, specimen in self:carried(userId) do
+		if specimen.registered then
+			specimen.needsService = true
+			specimen.condition = condition
+			specimen.charge = charge
+			table.insert(protected, specimen)
+		else
+			specimen.ownerUserId = nil
+			specimen.location = "World"
+			removeFromInventory(self, userId, specimen.id)
+			table.insert(dropped, specimen)
+		end
+	end
+	return dropped, protected
+end
+
+-- Repair/recharge one specimen (Decided: restores usability, never traits).
+-- Must not yield. Returns true, or false plus a reason:
+-- "NotFound" | "NotOwner" | "NotCarried" | "NotNeeded".
+function RelicStore:service(userId: number, specimenId: string, condition: number, charge: number): (boolean, string?)
+	local specimen = self.specimens[specimenId]
+	if not specimen then
+		return false, "NotFound"
+	end
+	if specimen.ownerUserId ~= userId then
+		return false, "NotOwner"
+	end
+	if specimen.location ~= "Carried" then
+		return false, "NotCarried"
+	end
+	if not specimen.needsService then
+		return false, "NotNeeded"
+	end
+	specimen.needsService = false
+	specimen.condition = condition
+	specimen.charge = charge
+	specimen.servicedAt = self.clock()
+	return true
+end
+
 -- Stable string of a specimen's identity: ID, type, and every permanent trait.
 function RelicStore.fingerprint(specimen): string
 	local keys = {}
@@ -110,6 +172,11 @@ function RelicStore.fingerprint(specimen): string
 		table.insert(parts, `{key}={specimen.traits[key]}`)
 	end
 	return table.concat(parts, "|")
+end
+
+-- Identity plus the states that death, recovery, and service must never change.
+function RelicStore.identityAndStates(specimen): string
+	return `{RelicStore.fingerprint(specimen)}|registered={specimen.registered}|appraised={specimen.appraised}|activated={specimen.activated}`
 end
 
 return RelicStore

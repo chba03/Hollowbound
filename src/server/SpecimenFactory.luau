@@ -48,17 +48,19 @@ function SpecimenFactory.create(typeId: string, qualityMin: number, qualityMax: 
 		ownerUserId = nil :: number?,
 		location = "World", -- "World" (lying in the expedition) or "Carried"
 
-		-- Three separate states (Decided). None implies another.
+		-- Separate states (Decided). None implies another.
 		appraised = false,
 		activated = not relicType.requiresActivation,
 		registered = false,
+		needsService = false, -- set when a registered relic returns after final death
 
-		-- Usability, restored later by repair/recharge without touching traits.
+		-- Usability, restored by town service (repair/recharge) without touching traits.
 		condition = 1,
 		charge = 1,
 
 		foundAt = nil :: number?,
 		registeredAt = nil :: number?,
+		servicedAt = nil :: number?,
 	}
 end
 

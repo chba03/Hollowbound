@@ -1,7 +1,7 @@
 --[[
 	DEVELOPMENT ONLY. Builds placeholder geometry at runtime during Studio playtests:
 	a town with spawn and registry terminal, a camp, and an expedition pickup area,
-	connected by walkways.
+	connected by walkways. ensureServiceStation adds a separate relic service station.
 
 	This module only adds Workspace.HollowboundDevMap. It never edits or removes other
 	Workspace content. It builds nothing when:
@@ -163,6 +163,49 @@ function DevMap.ensure()
 			player:LoadCharacter()
 		end
 	end
+end
+
+-- Adds a relic service station 8 studs to the side of the first registration terminal,
+-- as its own model (Workspace.HollowboundDevServiceStation). It never edits the map or
+-- the terminal, so it also works with a saved copy of the dev map or a hand-built
+-- town. Skipped if any part is already tagged as a service station.
+function DevMap.ensureServiceStation()
+	if #CollectionService:GetTagged(Tags.ServiceStation) > 0 then
+		return
+	end
+	local terminal = CollectionService:GetTagged(Tags.RegistrationTerminal)[1]
+	if not (terminal and terminal:IsA("BasePart")) then
+		warn("[Hollowbound] No registration terminal found; dev service station not built.")
+		return
+	end
+
+	local model = Instance.new("Model")
+	model.Name = "HollowboundDevServiceStation"
+
+	local size = Vector3.new(5, 3, 3)
+	local base = terminal.CFrame * CFrame.new(8, -terminal.Size.Y / 2 + size.Y / 2, 0)
+	local bench = Instance.new("Part")
+	bench.Name = "ServiceBench"
+	bench.Anchored = true
+	bench.Size = size
+	bench.CFrame = base
+	bench.Color = Color3.fromRGB(150, 95, 45)
+	bench.Material = Enum.Material.WoodPlanks
+	bench.Parent = model
+	CollectionService:AddTag(bench, Tags.ServiceStation)
+
+	local anvil = Instance.new("Part")
+	anvil.Name = "Anvil"
+	anvil.Anchored = true
+	anvil.Size = Vector3.new(2, 1, 1.2)
+	anvil.CFrame = base * CFrame.new(0, size.Y / 2 + 0.5, 0)
+	anvil.Color = Color3.fromRGB(70, 70, 75)
+	anvil.Material = Enum.Material.Metal
+	anvil.Parent = model
+
+	sign(bench, "Relic Service\nrepair and recharge", 5)
+	model.Parent = workspace
+	print("[Hollowbound] Built development service station next to the registration terminal.")
 end
 
 return DevMap

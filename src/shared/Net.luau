@@ -12,4 +12,7 @@ return {
 	-- server runs in Studio. Sends a pickup request that skips the prompt's range limit,
 	-- so the server's own validation can be tested.
 	DevPickupRequest = "DevPickupRequest",
+	-- Studio-only test hook. Kills the requesting player's character and calls the death
+	-- handler several more times for the same character, to test duplicate protection.
+	DevRepeatDeath = "DevRepeatDeath",
 }

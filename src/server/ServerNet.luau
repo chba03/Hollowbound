@@ -1,7 +1,7 @@
 --[[
 	Creates the remotes and sends inventory and notification updates to clients.
 	Clients never send state changes. They only ask for their inventory and, in Studio,
-	send the dev pickup request, which goes through the normal server validation.
+	send dev requests, which go through the normal server code paths.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -35,6 +35,7 @@ function ServerNet.start(theStore)
 	make("RemoteEvent", Net.Notify, folder)
 	if Config.Dev.EnableDevRemotes and RunService:IsStudio() then
 		make("RemoteEvent", Net.DevPickupRequest, folder)
+		make("RemoteEvent", Net.DevRepeatDeath, folder)
 	end
 	folder.Parent = ReplicatedStorage
 
@@ -60,8 +61,9 @@ function ServerNet.notify(player: Player, text: string, kind: string?)
 	remotes[Net.Notify]:FireClient(player, text, kind or "info")
 end
 
-function ServerNet.onDevPickupRequest(handler: (Player, any) -> ())
-	local remote = remotes[Net.DevPickupRequest]
+-- Connects a handler to a Studio-only dev remote. Does nothing outside Studio.
+function ServerNet.onDevRequest(remoteName: string, handler: (Player, any) -> ())
+	local remote = remotes[remoteName]
 	if remote then
 		remote.OnServerEvent:Connect(handler)
 	end

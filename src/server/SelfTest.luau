@@ -78,6 +78,44 @@ function SelfTest.run(): boolean
 	local newly3 = store:registerCarried(2)
 	check(#newly3 == 0 and not a.registered, "a player cannot register relics they do not carry")
 
+	-- Final death: player 1 carries a (unregistered) and b (registered).
+	check(store:claim(a.id, 1) == true, "player 1 picks up the second specimen")
+	-- No appraisal or activation flow exists yet; set them here to prove death keeps them.
+	a.appraised = true
+	a.activated = true
+	local aState = RelicStore.identityAndStates(a)
+	local bState = RelicStore.identityAndStates(b)
+
+	local dropped, protected = store:processDeath(1, 0, 0)
+	check(#dropped == 1 and dropped[1] == a and #protected == 1 and protected[1] == b, "death drops unregistered, protects registered")
+	check(a.ownerUserId == nil and a.location == "World", "dropped relic has no owner and is in the world")
+	check(RelicStore.identityAndStates(a) == aState, "dropped relic keeps ID, traits, appraisal, activation")
+	check(b.ownerUserId == 1 and b.location == "Carried" and b.needsService, "protected relic stays owned and needs service")
+	check(RelicStore.identityAndStates(b) == bState, "protected relic keeps ID, traits, and states")
+	check(#store:carried(1) == 1 and store:carried(1)[1] == b, "inventory after death holds only the protected relic")
+
+	local dropped2, protected2 = store:processDeath(1, 0, 0)
+	check(#dropped2 == 0 and #protected2 == 1 and #store:carried(1) == 1, "repeated death processing changes nothing")
+
+	-- Recovery
+	local okB, reasonB = store:claim(b.id, 2)
+	check(okB == false and reasonB == "AlreadyOwned", "protected relic cannot be claimed by another player")
+	local rec2 = store:claim(a.id, 2)
+	local rec1, recReason = store:claim(a.id, 1)
+	check(rec2 == true and rec1 == false and recReason == "AlreadyOwned", "competing recovery: exactly one player gets the dropped relic")
+	check(#store:carried(2) == 1 and #store:carried(1) == 1, "recovery creates no duplicate")
+	check(RelicStore.identityAndStates(a) == aState, "recovered relic keeps ID, traits, appraisal, activation")
+
+	-- Service
+	store:registerCarried(1)
+	check(b.needsService, "registration does not clear Needs service")
+	check(select(2, store:service(2, b.id, 1, 1)) == "NotOwner", "another player cannot service my relic")
+	check(select(2, store:service(2, a.id, 1, 1)) == "NotNeeded", "relic that does not need service is refused")
+	local svc = store:service(1, b.id, 1, 1)
+	check(svc == true and not b.needsService and b.condition == 1 and b.charge == 1, "service clears Needs service and restores condition")
+	check(RelicStore.identityAndStates(b) == bState, "service keeps ID, traits, registration, appraisal, activation")
+	check(select(2, store:service(1, b.id, 1, 1)) == "NotNeeded" and #store:carried(1) == 1, "repeated service changes nothing")
+
 	print(`[Hollowbound] Self-test finished: {total - failures}/{total} passed`)
 	return failures == 0
 end

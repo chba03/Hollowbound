@@ -15,6 +15,7 @@ local COLORS = {
 	muted = Color3.fromRGB(150, 155, 170),
 	unsecured = Color3.fromRGB(240, 150, 60),
 	registered = Color3.fromRGB(90, 200, 120),
+	needsService = Color3.fromRGB(235, 90, 90),
 	info = Color3.fromRGB(60, 65, 80),
 	success = Color3.fromRGB(40, 110, 70),
 	error = Color3.fromRGB(130, 45, 45),
@@ -181,10 +182,15 @@ function Hud:setInventory(items)
 		local securityColor = if item.security == "Registered" then COLORS.registered else COLORS.unsecured
 		label(row, { text = string.upper(item.security), font = Enum.Font.GothamBold, size = 12, color = securityColor, order = 2 })
 		label(row, { text = `{item.appraisal}  ·  {item.activation}`, size = 12, color = COLORS.muted, order = 3 })
+		if item.service == "Needs service" then
+			label(row, { text = "NEEDS SERVICE", font = Enum.Font.GothamBold, size = 12, color = COLORS.needsService, order = 4 })
+		else
+			label(row, { text = item.service, size = 12, color = COLORS.muted, order = 4 })
+		end
 
 		if item.traits then
 			for i, trait in item.traits do
-				label(row, { text = `{trait.label}: {trait.value} {trait.unit}`, size = 12, order = 3 + i })
+				label(row, { text = `{trait.label}: {trait.value} {trait.unit}`, size = 12, order = 4 + i })
 			end
 		end
 
@@ -215,7 +221,7 @@ function Hud:toast(text: string, kind: string?)
 end
 
 function Hud:showDevHint(text: string)
-	local hint = label(self.gui, { text = text, size = 12, color = COLORS.muted, dims = UDim2.new(0, 460, 0, 16) })
+	local hint = label(self.gui, { text = text, size = 12, color = COLORS.muted, dims = UDim2.new(0, 560, 0, 16) })
 	hint.AnchorPoint = Vector2.new(0, 1)
 	hint.Position = UDim2.new(0, 12, 1, -8)
 	hint.TextStrokeTransparency = 0.5

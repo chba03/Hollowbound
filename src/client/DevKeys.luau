@@ -6,6 +6,8 @@
 	  J - request the nearest world relic on the next shared server-time boundary.
 	      Press J in both client windows within a few seconds of each other. Both
 	      requests then fire at the same moment, testing a simultaneous pickup.
+	  L - die, and have the server report this character's death two extra times,
+	      to test that each death is processed only once.
 	The server applies the same validation as a prompt pickup.
 ]]
 
@@ -44,14 +46,20 @@ function DevKeys.start(remotes: Instance, hud)
 		return
 	end
 	local remote = remotes:FindFirstChild(Net.DevPickupRequest)
-	if not remote then
+	local repeatDeath = remotes:FindFirstChild(Net.DevRepeatDeath)
+	if not remote or not repeatDeath then
 		return
 	end
 
-	hud:showDevHint("DEV  K: pickup request ignoring prompt range   J: timed pickup (race test)")
+	hud:showDevHint("DEV  K: pickup ignoring prompt range   J: timed pickup (race)   L: repeated death")
 
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.L then
+			hud:toast("Dev: dying and reporting the death 3 times.", "info")
+			repeatDeath:FireServer()
 			return
 		end
 		if input.KeyCode ~= Enum.KeyCode.K and input.KeyCode ~= Enum.KeyCode.J then

@@ -1,12 +1,15 @@
 --[[
-	Presentation only: the pack (inventory) panel, zone label, and messages.
-	It renders whatever the server sends and holds no game state.
+	Presentation only: the pack (inventory) panel, base stats, zone label, rope hint,
+	layer banner, and messages. It renders whatever the server sends and holds no game
+	state.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
-local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
+local Shared = ReplicatedStorage:WaitForChild("HollowboundShared")
+local Config = require(Shared:WaitForChild("Config"))
+local Progression = require(Shared:WaitForChild("Progression"))
 
 local COLORS = {
 	panel = Color3.fromRGB(20, 22, 28),
@@ -15,6 +18,7 @@ local COLORS = {
 	muted = Color3.fromRGB(150, 155, 170),
 	unsecured = Color3.fromRGB(240, 150, 60),
 	registered = Color3.fromRGB(90, 200, 120),
+	displayed = Color3.fromRGB(230, 200, 90),
 	info = Color3.fromRGB(60, 65, 80),
 	success = Color3.fromRGB(40, 110, 70),
 	error = Color3.fromRGB(130, 45, 45),
@@ -24,6 +28,12 @@ local ZONE_TEXT = {
 	Town = "Town",
 	Camp = "Camp: refuge (relics stay unsecured)",
 	Depths = "Depths",
+}
+
+local STAMINA_COLORS = {
+	normal = Color3.fromRGB(120, 210, 120),
+	sprinting = Color3.fromRGB(240, 210, 90),
+	exhausted = Color3.fromRGB(220, 80, 70),
 }
 
 local Hud = {}
@@ -96,7 +106,7 @@ function Hud.new(playerGui: PlayerGui)
 	corner(panel, 8)
 	padding(panel, 10)
 	vlist(panel, 6)
-	label(panel, { text = "PACK: RELICS", font = Enum.Font.GothamBold, size = 14, order = 0 })
+	label(panel, { text = "RELICS", font = Enum.Font.GothamBold, size = 14, order = 0 })
 
 	local list = Instance.new("Frame")
 	list.Name = "List"
@@ -108,6 +118,64 @@ function Hud.new(playerGui: PlayerGui)
 	vlist(list, 6)
 	self.list = list
 
+	-- Base stats (top left, below the Roblox buttons)
+	local stats = Instance.new("Frame")
+	stats.Name = "Stats"
+	stats.Position = UDim2.new(0, 16, 0, 16)
+	stats.Size = UDim2.fromOffset(230, 0)
+	stats.AutomaticSize = Enum.AutomaticSize.Y
+	stats.BackgroundColor3 = COLORS.panel
+	stats.BackgroundTransparency = 0.15
+	stats.Parent = gui
+	corner(stats, 8)
+	padding(stats, 10)
+	vlist(stats, 4)
+	self.cashLabel = label(stats, { font = Enum.Font.GothamBold, size = 20, color = COLORS.displayed, order = 1 })
+	self.incomeLabel = label(stats, { size = 13, color = COLORS.muted, order = 2 })
+	self.ropeLabel = label(stats, { size = 13, order = 3 })
+	self.slotsLabel = label(stats, { size = 13, order = 4 })
+	self.depthLabel = label(stats, { size = 13, order = 5 })
+
+	-- Rope hint (bottom center, above the toast)
+	self.hintLabel = label(gui, {
+		text = "",
+		font = Enum.Font.GothamBold,
+		size = 16,
+		align = Enum.TextXAlignment.Center,
+		dims = UDim2.new(0, 420, 0, 22),
+	})
+	self.hintLabel.AnchorPoint = Vector2.new(0.5, 1)
+	self.hintLabel.Position = UDim2.new(0.5, 0, 1, -170)
+	self.hintLabel.TextStrokeTransparency = 0.4
+
+	-- Layer banner (upper center)
+	local banner = label(gui, {
+		text = "",
+		font = Enum.Font.Garamond,
+		size = 40,
+		align = Enum.TextXAlignment.Center,
+		dims = UDim2.new(0, 600, 0, 90),
+	})
+	banner.AnchorPoint = Vector2.new(0.5, 0)
+	banner.Position = UDim2.new(0.5, 0, 0.18, 0)
+	banner.TextWrapped = true
+	banner.TextTransparency = 1
+	banner.TextStrokeTransparency = 1
+	self.bannerLabel = banner
+	self.bannerToken = 0
+
+	-- Depth meter (top center, above the zone label)
+	self.depthMeter = label(gui, {
+		text = "SURFACE",
+		font = Enum.Font.GothamBlack,
+		size = 30,
+		align = Enum.TextXAlignment.Center,
+		dims = UDim2.new(0, 300, 0, 36),
+	})
+	self.depthMeter.AnchorPoint = Vector2.new(0.5, 0)
+	self.depthMeter.Position = UDim2.new(0.5, 0, 0, 10)
+	self.depthMeter.TextStrokeTransparency = 0.3
+
 	-- Zone label (top center)
 	self.zoneLabel = label(gui, {
 		text = "",
@@ -117,8 +185,61 @@ function Hud.new(playerGui: PlayerGui)
 		dims = UDim2.new(0, 420, 0, 28),
 	})
 	self.zoneLabel.AnchorPoint = Vector2.new(0.5, 0)
-	self.zoneLabel.Position = UDim2.new(0.5, 0, 0, 12)
+	self.zoneLabel.Position = UDim2.new(0.5, 0, 0, 52)
 	self.zoneLabel.TextStrokeTransparency = 0.4
+
+	-- Night timer (top center, under the zone label)
+	self.nightLabel = label(gui, {
+		text = "",
+		size = 14,
+		color = COLORS.muted,
+		align = Enum.TextXAlignment.Center,
+		dims = UDim2.new(0, 420, 0, 20),
+	})
+	self.nightLabel.AnchorPoint = Vector2.new(0.5, 0)
+	self.nightLabel.Position = UDim2.new(0.5, 0, 0, 80)
+	self.nightLabel.TextStrokeTransparency = 0.5
+
+	-- Stamina bar (bottom center, above the hints). Fades out while full.
+	local staminaFrame = Instance.new("Frame")
+	staminaFrame.Name = "Stamina"
+	staminaFrame.AnchorPoint = Vector2.new(0.5, 1)
+	staminaFrame.Position = UDim2.new(0.5, 0, 1, -200)
+	staminaFrame.Size = UDim2.fromOffset(260, 12)
+	staminaFrame.BackgroundColor3 = COLORS.panel
+	staminaFrame.BackgroundTransparency = 1
+	staminaFrame.Parent = gui
+	corner(staminaFrame, 6)
+	local staminaStroke = Instance.new("UIStroke")
+	staminaStroke.Color = Color3.fromRGB(20, 20, 24)
+	staminaStroke.Thickness = 1.5
+	staminaStroke.Transparency = 1
+	staminaStroke.Parent = staminaFrame
+	local staminaFill = Instance.new("Frame")
+	staminaFill.Name = "Fill"
+	staminaFill.Size = UDim2.fromScale(1, 1)
+	staminaFill.BackgroundColor3 = STAMINA_COLORS.normal
+	staminaFill.BackgroundTransparency = 1
+	staminaFill.BorderSizePixel = 0
+	staminaFill.Parent = staminaFrame
+	corner(staminaFill, 6)
+	self.staminaFrame = staminaFrame
+	self.staminaStroke = staminaStroke
+	self.staminaFill = staminaFill
+	self.staminaVisible = false
+
+	-- Server-wide announcements (stacked, upper center)
+	local announcements = Instance.new("Frame")
+	announcements.Name = "Announcements"
+	announcements.AnchorPoint = Vector2.new(0.5, 0)
+	announcements.Position = UDim2.new(0.5, 0, 0, 106)
+	announcements.Size = UDim2.fromOffset(640, 0)
+	announcements.AutomaticSize = Enum.AutomaticSize.Y
+	announcements.BackgroundTransparency = 1
+	announcements.Parent = gui
+	vlist(announcements, 6)
+	self.announcements = announcements
+	self.announceCount = 0
 
 	-- Message toast (bottom center)
 	local toast = label(gui, {
@@ -152,7 +273,7 @@ function Hud:setInventory(items)
 	end
 
 	if #items == 0 then
-		label(self.list, { text = "No relics carried.", color = COLORS.muted, order = 1 })
+		label(self.list, { text = "No relics yet. Find some in the Hollow.", color = COLORS.muted, order = 1 })
 		return
 	end
 
@@ -179,12 +300,22 @@ function Hud:setInventory(items)
 		})
 
 		local securityColor = if item.security == "Registered" then COLORS.registered else COLORS.unsecured
-		label(row, { text = string.upper(item.security), font = Enum.Font.GothamBold, size = 12, color = securityColor, order = 2 })
-		label(row, { text = `{item.appraisal}  ·  {item.activation}`, size = 12, color = COLORS.muted, order = 3 })
+		local status = string.upper(item.security)
+		if item.placed then
+			status = "ON DISPLAY"
+			securityColor = COLORS.displayed
+		end
+		label(row, { text = status, font = Enum.Font.GothamBold, size = 12, color = securityColor, order = 2 })
+		local incomeText = `Layer {item.layer}  ·  size {string.format("%.2f", item.size or 1)}x  ·  {Progression.formatCash(item.income)}/s`
+		if not item.placed then
+			incomeText ..= " on display"
+		end
+		label(row, { text = incomeText, size = 12, color = COLORS.muted, order = 3 })
+		label(row, { text = `{item.appraisal}  ·  {item.activation}`, size = 12, color = COLORS.muted, order = 4 })
 
 		if item.traits then
 			for i, trait in item.traits do
-				label(row, { text = `{trait.label}: {trait.value} {trait.unit}`, size = 12, order = 3 + i })
+				label(row, { text = `{trait.label}: {trait.value} {trait.unit}`, size = 12, order = 4 + i })
 			end
 		end
 
@@ -192,8 +323,57 @@ function Hud:setInventory(items)
 	end
 end
 
-function Hud:setZone(zone: string?)
-	self.zoneLabel.Text = if zone then (ZONE_TEXT[zone] or zone) else ""
+function Hud:setZone(zone: string?, layer: number?)
+	local text = if zone then (ZONE_TEXT[zone] or zone) else ""
+	local def = layer and Config.Layers[layer]
+	if zone == "Depths" and def then
+		text = `Layer {layer}: {def.name}`
+	elseif zone == "Camp" and def then
+		text ..= `  ·  Layer {layer}`
+	end
+	self.zoneLabel.Text = text
+end
+
+-- stats: attributes read from the player (see client init).
+function Hud:setStats(stats)
+	local slotsUsed = stats.slotsUsed or 0
+	self.cashLabel.Text = Progression.formatCash(stats.cash or 0)
+	self.incomeLabel.Text = `+{Progression.formatCash(stats.income or 0)}/s from displays`
+	self.ropeLabel.Text = `Rope: {stats.ropeLength or 0} studs  ·  {stats.ropeSpeed or 0} studs/s`
+	self.slotsLabel.Text = `Displays: {slotsUsed}/{stats.slots or 0}`
+	local deepest = math.floor((stats.deepest or 0) * Config.Display.MetersPerStud)
+	self.depthLabel.Text = if deepest > 0 then `Deepest: {deepest} m` else "Deepest: surface"
+end
+
+-- The big depth readout. depthStuds: studs below rim height (0 or less = surface).
+function Hud:setDepth(depthStuds: number)
+	local meters = math.floor(depthStuds * Config.Display.MetersPerStud)
+	local text = if meters > 0 then `{meters} m` else "SURFACE"
+	if self.depthMeter.Text ~= text then
+		self.depthMeter.Text = text
+	end
+end
+
+function Hud:setHint(text: string?)
+	text = text or ""
+	if self.hintLabel.Text ~= text then
+		self.hintLabel.Text = text
+	end
+end
+
+function Hud:banner(title: string, subtitle: string)
+	self.bannerToken += 1
+	local token = self.bannerToken
+	local banner = self.bannerLabel
+	banner.Text = title .. "\n" .. subtitle
+	banner.TextTransparency = 0
+	banner.TextStrokeTransparency = 0.5
+	task.delay(3, function()
+		if self.bannerToken ~= token then
+			return
+		end
+		TweenService:Create(banner, TweenInfo.new(1), { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
+	end)
 end
 
 function Hud:toast(text: string, kind: string?)
@@ -212,6 +392,88 @@ function Hud:toast(text: string, kind: string?)
 		local info = TweenInfo.new(0.6)
 		TweenService:Create(toast, info, { BackgroundTransparency = 1, TextTransparency = 1 }):Play()
 	end)
+end
+
+-- A big, coloured message every player sees (rare spawns, nightfall, dawn).
+function Hud:announce(title: string, subtitle: string, rarity: string?)
+	self.announceCount += 1
+	local tier = rarity and Config.RarityById[rarity]
+	local color = if tier then tier.color else Color3.fromRGB(255, 214, 120)
+
+	local card = Instance.new("Frame")
+	card.Name = "Announcement"
+	card.Size = UDim2.new(1, 0, 0, 0)
+	card.AutomaticSize = Enum.AutomaticSize.Y
+	card.BackgroundColor3 = COLORS.panel
+	card.BackgroundTransparency = 0.2
+	card.LayoutOrder = -self.announceCount -- newest on top
+	card.Parent = self.announcements
+	corner(card, 8)
+	padding(card, 8)
+	vlist(card, 2)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = color
+	stroke.Thickness = 2
+	stroke.Parent = card
+
+	local titleLabel = label(card, { text = title, font = Enum.Font.GothamBlack, size = 22, color = color, align = Enum.TextXAlignment.Center, order = 1 })
+	titleLabel.TextStrokeTransparency = 0.4
+	local subtitleLabel = label(card, { text = subtitle, font = Enum.Font.GothamBold, size = 16, align = Enum.TextXAlignment.Center, order = 2 })
+	subtitleLabel.TextWrapped = true
+	subtitleLabel.AutomaticSize = Enum.AutomaticSize.Y
+
+	-- Keep at most three on screen.
+	local cards = {}
+	for _, child in self.announcements:GetChildren() do
+		if child:IsA("Frame") then
+			table.insert(cards, child)
+		end
+	end
+	table.sort(cards, function(a, b)
+		return a.LayoutOrder < b.LayoutOrder
+	end)
+	for index = 4, #cards do
+		cards[index]:Destroy()
+	end
+
+	task.delay(Config.Announce.Seconds, function()
+		if not card.Parent then
+			return
+		end
+		local info = TweenInfo.new(0.8)
+		TweenService:Create(card, info, { BackgroundTransparency = 1 }):Play()
+		TweenService:Create(stroke, info, { Transparency = 1 }):Play()
+		TweenService:Create(titleLabel, info, { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
+		TweenService:Create(subtitleLabel, info, { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
+		task.wait(0.8)
+		card:Destroy()
+	end)
+end
+
+-- fraction 0..1; sprinting and exhausted change the colour. Hidden while full and idle.
+function Hud:setStamina(fraction: number, sprinting: boolean, exhausted: boolean)
+	fraction = math.clamp(fraction, 0, 1)
+	local fill = self.staminaFill :: Frame
+	TweenService:Create(fill, TweenInfo.new(0.12), { Size = UDim2.fromScale(fraction, 1) }):Play()
+	fill.BackgroundColor3 = if exhausted
+		then STAMINA_COLORS.exhausted
+		elseif sprinting then STAMINA_COLORS.sprinting
+		else STAMINA_COLORS.normal
+
+	local visible = sprinting or fraction < 0.999
+	if visible == self.staminaVisible then
+		return
+	end
+	self.staminaVisible = visible
+	local info = TweenInfo.new(if visible then 0.15 else 0.8)
+	TweenService:Create(self.staminaFrame, info, { BackgroundTransparency = if visible then 0.35 else 1 }):Play()
+	TweenService:Create(self.staminaStroke, info, { Transparency = if visible then 0.2 else 1 }):Play()
+	TweenService:Create(fill, info, { BackgroundTransparency = if visible then 0 else 1 }):Play()
+end
+
+function Hud:setNightTimer(text: string, urgent: boolean)
+	self.nightLabel.Text = text
+	self.nightLabel.TextColor3 = if urgent then Color3.fromRGB(255, 200, 90) else COLORS.muted
 end
 
 function Hud:showDevHint(text: string)

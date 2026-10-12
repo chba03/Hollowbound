@@ -6,6 +6,7 @@
 	  J - request the nearest world relic on the next shared server-time boundary.
 	      Press J in both client windows within a few seconds of each other. Both
 	      requests then fire at the same moment, testing a simultaneous pickup.
+	  M - ask the server for Config.Dev.CashGrant cash, to test upgrades and deep layers.
 	The server applies the same validation as a prompt pickup.
 ]]
 
@@ -44,14 +45,19 @@ function DevKeys.start(remotes: Instance, hud)
 		return
 	end
 	local remote = remotes:FindFirstChild(Net.DevPickupRequest)
+	local cashRemote = remotes:FindFirstChild(Net.DevGrantCash)
 	if not remote then
 		return
 	end
 
-	hud:showDevHint("DEV  K: pickup request ignoring prompt range   J: timed pickup (race test)")
+	hud:showDevHint("DEV  K: pickup ignoring range   J: timed pickup (race test)   M: +cash")
 
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.M and cashRemote then
+			cashRemote:FireServer()
 			return
 		end
 		if input.KeyCode ~= Enum.KeyCode.K and input.KeyCode ~= Enum.KeyCode.J then

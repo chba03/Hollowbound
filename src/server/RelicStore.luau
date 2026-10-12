@@ -1,8 +1,12 @@
 --[[
-	Server-memory store of every specimen and every player's carried relics.
+	Server-memory store of every specimen and every player's relics.
 
 	This module uses no Roblox services so its rules can be self-tested in isolation.
-	Milestone 1 keeps everything in memory: data is lost when the server shuts down.
+	PlayerData copies registered relics into the saved profile; this store is the live,
+	in-memory view during a session.
+
+	Specimen location: "World" (lying in the Hollow), "Carried" (in the owner's pack), or
+	"Placed" (on a display pedestal at the owner's plot, with specimen.slot set).
 
 	Concurrency note: Roblox runs server Luau on one thread. A handler cannot be
 	interrupted unless it yields. claim() checks and claims without yielding, so when
@@ -39,6 +43,14 @@ local function inventoryFor(self, userId: number)
 	return inventory
 end
 
+local function addToInventory(self, userId: number, specimenId: string)
+	local inventory = inventoryFor(self, userId)
+	if not inventory.has[specimenId] then
+		inventory.has[specimenId] = true
+		table.insert(inventory.order, specimenId)
+	end
+end
+
 -- Pickup establishes ownership (Decided). Must not yield.
 -- Returns true, or false plus a reason: "NotFound" | "AlreadyOwned" | "Unavailable".
 function RelicStore:claim(specimenId: string, userId: number): (boolean, string?)
@@ -56,17 +68,34 @@ function RelicStore:claim(specimenId: string, userId: number): (boolean, string?
 	specimen.ownerUserId = userId
 	specimen.location = "Carried"
 	specimen.foundAt = self.clock()
-
-	local inventory = inventoryFor(self, userId)
-	if not inventory.has[specimenId] then
-		inventory.has[specimenId] = true
-		table.insert(inventory.order, specimenId)
-	end
+	addToInventory(self, userId, specimenId)
 	return true
 end
 
--- Specimens the player carries, in pickup order.
-function RelicStore:carried(userId: number)
+-- Removes a relic that still lies unclaimed in the world (the night reset).
+-- Returns true if it was removed. Never touches owned relics. Must not yield.
+function RelicStore:removeWorld(specimenId: string): boolean
+	local specimen = self.specimens[specimenId]
+	if not specimen or specimen.ownerUserId ~= nil or specimen.location ~= "World" then
+		return false
+	end
+	self.specimens[specimenId] = nil
+	return true
+end
+
+-- Restores a saved specimen for its owner when they join. Saved specimens are always
+-- registered (only registered relics are saved), so they come back secured.
+function RelicStore:restore(specimen, userId: number)
+	assert(specimen.registered, "Only registered specimens are restored from saves")
+	specimen.ownerUserId = userId
+	specimen.location = "Carried"
+	specimen.slot = nil
+	self:add(specimen)
+	addToInventory(self, userId, specimen.id)
+end
+
+-- Every specimen the player owns (carried and placed), in pickup order.
+function RelicStore:owned(userId: number)
 	local list = {}
 	local inventory = self.inventories[userId]
 	if not inventory then
@@ -79,6 +108,28 @@ function RelicStore:carried(userId: number)
 		end
 	end
 	return list
+end
+
+-- Specimens in the player's pack (not on display), in pickup order.
+function RelicStore:carried(userId: number)
+	local list = {}
+	for _, specimen in self:owned(userId) do
+		if specimen.location == "Carried" then
+			table.insert(list, specimen)
+		end
+	end
+	return list
+end
+
+-- Specimens on display at the player's plot, keyed by slot.
+function RelicStore:placed(userId: number)
+	local bySlot = {}
+	for _, specimen in self:owned(userId) do
+		if specimen.location == "Placed" then
+			bySlot[specimen.slot] = specimen
+		end
+	end
+	return bySlot
 end
 
 -- Registers every carried relic that is not yet registered. Changes the existing
@@ -96,6 +147,62 @@ function RelicStore:registerCarried(userId: number)
 		end
 	end
 	return newly, already
+end
+
+-- Puts a carried, registered relic on display slot `slot`. Only registered relics can
+-- be displayed, so a display always holds a secured specimen.
+-- Returns true, or false plus a reason:
+-- "NotFound" | "NotOwner" | "NotCarried" | "Unregistered" | "SlotLocked" | "SlotTaken"
+function RelicStore:place(userId: number, specimenId: string, slot: number, capacity: number): (boolean, string?)
+	local specimen = self.specimens[specimenId]
+	if not specimen then
+		return false, "NotFound"
+	end
+	if specimen.ownerUserId ~= userId then
+		return false, "NotOwner"
+	end
+	if specimen.location ~= "Carried" then
+		return false, "NotCarried"
+	end
+	if not specimen.registered then
+		return false, "Unregistered"
+	end
+	if slot < 1 or slot > capacity then
+		return false, "SlotLocked"
+	end
+	if self:placed(userId)[slot] then
+		return false, "SlotTaken"
+	end
+	specimen.location = "Placed"
+	specimen.slot = slot
+	return true
+end
+
+-- Takes a displayed relic back into the pack. Returns the specimen, or nil.
+function RelicStore:unplace(userId: number, slot: number)
+	local specimen = self:placed(userId)[slot]
+	if not specimen then
+		return nil
+	end
+	specimen.location = "Carried"
+	specimen.slot = nil
+	return specimen
+end
+
+-- Forgets everything a leaving player owns. Registered relics are already in their
+-- save. Open: unregistered relics are forfeited when a player leaves mid-expedition;
+-- the design record only defines what happens on final death.
+-- Returns the number of unsecured relics that were forfeited.
+function RelicStore:releasePlayer(userId: number): number
+	local forfeited = 0
+	for _, specimen in self:owned(userId) do
+		if not specimen.registered then
+			forfeited += 1
+		end
+		self.specimens[specimen.id] = nil
+	end
+	self.inventories[userId] = nil
+	return forfeited
 end
 
 -- Stable string of a specimen's identity: ID, type, and every permanent trait.

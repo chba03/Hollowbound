@@ -1,16 +1,20 @@
 --[[
 	Town registration terminal. Any BasePart tagged Tags.RegistrationTerminal gets a
 	prompt. Place terminals only in town: only a return to town secures relics (Decided).
+	Each rim plot has one, since the plots are the town.
 
 	Registration changes only the existing record's `registered` flag. It never copies
-	a specimen, issues a new ID, or touches traits, appraisal, or activation.
+	a specimen, issues a new ID, or touches traits, appraisal, or activation. Newly
+	registered relics are then written to the player's saved profile.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
+local Progression = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Progression"))
 local Characters = require(script.Parent.Characters)
+local PlayerData = require(script.Parent.PlayerData)
 local RelicStore = require(script.Parent.RelicStore)
 local ServerNet = require(script.Parent.ServerNet)
 
@@ -21,7 +25,7 @@ local store
 local function describe(specimens): string
 	local names = {}
 	for _, specimen in specimens do
-		table.insert(names, `{Config.RelicTypes[specimen.typeId].displayName} ({specimen.rarity})`)
+		table.insert(names, `{Progression.relicName(specimen.typeId, specimen.size)} ({specimen.rarity})`)
 	end
 	return table.concat(names, ", ")
 end
@@ -58,8 +62,12 @@ function Registration.tryRegister(player: Player, terminal: BasePart)
 	end
 	assert(#store:carried(player.UserId) == #carried, "Registration changed the number of carried relics")
 
+	for _, specimen in newly do
+		PlayerData.saveSpecimen(player, specimen)
+	end
+
 	if #newly > 0 then
-		ServerNet.notify(player, `Registered: {describe(newly)}. These relics are now secured.`, "success")
+		ServerNet.notify(player, `Registered: {describe(newly)}. These relics are now secured. Display them on a pedestal to earn cash.`, "success")
 	else
 		ServerNet.notify(player, `Nothing new to register. Already registered: {describe(already)}.`, "info")
 	end

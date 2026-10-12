@@ -1,25 +1,28 @@
 --[[
-	Spawns the test specimens in the expedition area and handles pickup.
+	Relics lying in the Hollow: the model each one shows (RelicModels), and pickup.
 
-	Pickup requests come from the server-side ProximityPrompt.Triggered event, or, in
-	Studio, from the dev remote. Both use tryPickup, which checks the character,
-	distance, availability, and ownership before claiming.
+	RelicSpawner decides what spawns where and calls WorldRelics.spawn. Pickup requests
+	come from the server-side ProximityPrompt.Triggered event, or, in Studio, from the
+	dev remote. Both use tryPickup, which checks the character, distance, availability,
+	and ownership before claiming.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
-local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
+local Progression = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Progression"))
 local Characters = require(script.Parent.Characters)
-local RelicStore = require(script.Parent.RelicStore)
+local Ground = require(script.Parent.Ground)
+local RelicModels = require(script.Parent.RelicModels)
 local ServerNet = require(script.Parent.ServerNet)
-local SpecimenFactory = require(script.Parent.SpecimenFactory)
 
 local WorldRelics = {}
 
 local store
-local partsById: { [string]: BasePart } = {}
+local folder: Folder
+local partsById: { [string]: BasePart } = {} -- each relic model's Core part
+local rng = Random.new()
 
 local REJECTIONS = {
 	NotFound = "That relic does not exist.",
@@ -27,44 +30,51 @@ local REJECTIONS = {
 	Unavailable = "That relic is no longer there.",
 }
 
-local function rarityColor(rarityId: string): Color3
-	for _, tier in Config.Rarities do
-		if tier.id == rarityId then
-			return tier.color
-		end
-	end
-	return Color3.new(1, 1, 1)
-end
+-- Shows a specimen (already added to the store) as its relic model above spawnPart.
+function WorldRelics.spawn(specimen, spawnPart: BasePart)
+	local tier = Config.RarityById[specimen.rarity]
+	local size = math.min(specimen.size or 1, Config.Sizes.MaxWorldScale)
+	-- Sit on the real ground under the spawn point (terrain is uneven and grass covers
+	-- low objects), with the model's lower half plus some clearance above it.
+	local groundY = Ground.below(spawnPart.Position) or (spawnPart.Position.Y + spawnPart.Size.Y / 2)
+	local height = 1.1 * (if tier then tier.scale else 1) * size + Config.Pickup.GroundClearance
+	local position = Vector3.new(spawnPart.Position.X, groundY + height, spawnPart.Position.Z)
+	local cframe = CFrame.new(position) * CFrame.Angles(0, rng:NextNumber(0, 2 * math.pi), 0)
 
-local function spawnWorldPart(specimen, spawnPart: BasePart, folder: Folder)
-	local relicType = Config.RelicTypes[specimen.typeId]
-
-	local part = Instance.new("Part")
-	part.Name = "Relic_" .. specimen.id
-	part.Shape = Enum.PartType.Ball
-	part.Size = Vector3.new(1.6, 1.6, 1.6)
-	part.Material = Enum.Material.Neon
-	part.Color = rarityColor(specimen.rarity)
-	part.Anchored = true
-	part.CanCollide = false
-	part.Position = spawnPart.Position + Vector3.new(0, spawnPart.Size.Y / 2 + 1.5, 0)
-	part:SetAttribute("SpecimenId", specimen.id)
+	local model = RelicModels.build(specimen.typeId, specimen.rarity, cframe, true, size)
+	model.Name = "Relic_" .. specimen.id
+	local core = model.PrimaryPart :: BasePart
+	core:SetAttribute("SpecimenId", specimen.id)
 
 	-- The prompt only shows type and rarity, which are visible before appraisal.
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ActionText = "Pick up"
-	prompt.ObjectText = `{relicType.displayName} ({specimen.rarity})`
-	prompt.MaxActivationDistance = Config.Pickup.PromptMaxDistance
+	prompt.ObjectText = `{Progression.relicName(specimen.typeId, specimen.size)} ({specimen.rarity}) · {Progression.formatCash(Progression.incomeOf(specimen))}/s`
+	prompt.MaxActivationDistance = Config.Pickup.PromptMaxDistance + height
 	prompt.HoldDuration = Config.Pickup.HoldDuration
 	prompt.RequiresLineOfSight = false
-	prompt.Parent = part
+	prompt.Parent = core
 	prompt.Triggered:Connect(function(player)
 		WorldRelics.tryPickup(player, specimen.id, "prompt")
 	end)
 
-	CollectionService:AddTag(part, Config.Tags.WorldRelic)
-	part.Parent = folder
-	partsById[specimen.id] = part
+	CollectionService:AddTag(core, Config.Tags.WorldRelic)
+	model.Parent = folder
+	partsById[specimen.id] = core
+end
+
+-- Removes an unclaimed relic from the world and the store (the night reset).
+-- Returns true if it was still there.
+function WorldRelics.despawn(specimenId: string): boolean
+	if not store:removeWorld(specimenId) then
+		return false
+	end
+	local part = partsById[specimenId]
+	partsById[specimenId] = nil
+	if part and part.Parent then
+		(part.Parent :: Instance):Destroy()
+	end
+	return true
 end
 
 -- Returns true if this player now owns the specimen.
@@ -89,10 +99,11 @@ function WorldRelics.tryPickup(player: Player, specimenId: any, source: string):
 	end
 
 	local distance = (root.Position - part.Position).Magnitude
-	if distance > Config.Pickup.ServerMaxDistance then
+	local limit = Config.Pickup.ServerMaxDistance + part.Size.Y / 2 -- big relics sit higher
+	if distance > limit then
 		ServerNet.notify(
 			player,
-			string.format("Too far away to pick that up (%.0f studs, limit %d).", distance, Config.Pickup.ServerMaxDistance),
+			string.format("Too far away to pick that up (%.0f studs, limit %.0f).", distance, limit),
 			"error"
 		)
 		print(string.format("[Hollowbound] Rejected pickup by %s (%s): distance %.1f", player.Name, source, distance))
@@ -107,11 +118,17 @@ function WorldRelics.tryPickup(player: Player, specimenId: any, source: string):
 	end
 
 	partsById[specimenId] = nil
-	part:Destroy()
+	if part.Parent then
+		(part.Parent :: Instance):Destroy() -- the whole relic model
+	end
 
 	local specimen = store:get(specimenId)
-	local name = Config.RelicTypes[specimen.typeId].displayName
-	ServerNet.notify(player, `Picked up {name} ({specimen.rarity}). Unsecured until registered in town.`, "success")
+	local name = Progression.relicName(specimen.typeId, specimen.size)
+	ServerNet.notify(
+		player,
+		`Picked up {name} ({specimen.rarity}). Unsecured until registered at your base's terminal.`,
+		"success"
+	)
 	ServerNet.pushInventory(player)
 	print(`[Hollowbound] {player.Name} picked up {specimenId} via {source}`)
 	return true
@@ -120,35 +137,9 @@ end
 function WorldRelics.start(theStore)
 	store = theStore
 
-	local folder = Instance.new("Folder")
+	folder = Instance.new("Folder")
 	folder.Name = "HollowboundWorldRelics"
 	folder.Parent = workspace
-
-	local spawns: { [string]: BasePart } = {}
-	for _, instance in CollectionService:GetTagged(Config.Tags.RelicSpawn) do
-		if instance:IsA("BasePart") then
-			spawns[instance.Name] = instance
-		end
-	end
-
-	local rng = Random.new()
-	local function makeId()
-		return HttpService:GenerateGUID(false)
-	end
-
-	for _, entry in Config.TestSpecimens do
-		local spawnPart = spawns[entry.spawnName]
-		if not spawnPart then
-			warn(`[Hollowbound] No part tagged {Config.Tags.RelicSpawn} named {entry.spawnName}; specimen not spawned.`)
-			continue
-		end
-		local specimen = SpecimenFactory.create(entry.typeId, entry.qualityMin, entry.qualityMax, rng, makeId)
-		store:add(specimen)
-		spawnWorldPart(specimen, spawnPart, folder)
-		if Config.Dev.LogTraitsToServerOutput then
-			print(`[Hollowbound] Generated {specimen.rarity} {RelicStore.fingerprint(specimen)}`)
-		end
-	end
 
 	ServerNet.onDevPickupRequest(function(player, specimenId)
 		WorldRelics.tryPickup(player, specimenId, "dev-remote")

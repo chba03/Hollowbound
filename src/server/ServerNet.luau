@@ -1,7 +1,8 @@
 --[[
 	Creates the remotes and sends inventory and notification updates to clients.
-	Clients never send state changes. They only ask for their inventory and, in Studio,
-	send the dev pickup request, which goes through the normal server validation.
+	Clients never send state changes directly. They ask for their inventory, request a
+	rope grab or release (validated by RopeService), and, in Studio, use the dev remotes,
+	which go through the normal server validation.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -33,8 +34,15 @@ function ServerNet.start(theStore)
 	make("RemoteFunction", Net.GetInventory, folder)
 	make("RemoteEvent", Net.InventoryChanged, folder)
 	make("RemoteEvent", Net.Notify, folder)
+	make("RemoteEvent", Net.Announce, folder)
+	make("RemoteEvent", Net.RopeGrab, folder)
+	make("RemoteEvent", Net.RopeRelease, folder)
+	make("RemoteEvent", Net.Sprint, folder)
+	make("RemoteEvent", Net.BuyUpgrade, folder)
+	make("RemoteEvent", Net.ShopBuy, folder)
 	if Config.Dev.EnableDevRemotes and RunService:IsStudio() then
 		make("RemoteEvent", Net.DevPickupRequest, folder)
+		make("RemoteEvent", Net.DevGrantCash, folder)
 	end
 	folder.Parent = ReplicatedStorage
 
@@ -43,11 +51,14 @@ function ServerNet.start(theStore)
 	end
 end
 
+-- Everything the player owns: pack first, then displayed relics.
 function ServerNet.inventoryView(player: Player)
-	local views = {}
-	for _, specimen in store:carried(player.UserId) do
-		table.insert(views, RelicView.forOwner(specimen))
+	local views, displayed = {}, {}
+	for _, specimen in store:owned(player.UserId) do
+		local view = RelicView.forOwner(specimen)
+		table.insert(if view.placed then displayed else views, view)
 	end
+	table.move(displayed, 1, #displayed, #views + 1, views)
 	return views
 end
 
@@ -60,11 +71,21 @@ function ServerNet.notify(player: Player, text: string, kind: string?)
 	remotes[Net.Notify]:FireClient(player, text, kind or "info")
 end
 
-function ServerNet.onDevPickupRequest(handler: (Player, any) -> ())
-	local remote = remotes[Net.DevPickupRequest]
+-- A big message on every player's screen. rarity (a tier id) colours it.
+function ServerNet.announceAll(title: string, subtitle: string, rarity: string?)
+	remotes[Net.Announce]:FireAllClients(title, subtitle, rarity)
+end
+
+-- Connects a handler to a client -> server remote. Dev remotes may not exist.
+function ServerNet.on(name: string, handler: (Player, ...any) -> ())
+	local remote = remotes[name]
 	if remote then
 		remote.OnServerEvent:Connect(handler)
 	end
+end
+
+function ServerNet.onDevPickupRequest(handler: (Player, any) -> ())
+	ServerNet.on(Net.DevPickupRequest, handler)
 end
 
 return ServerNet

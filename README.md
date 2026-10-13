@@ -1,6 +1,6 @@
 # Hollowbound: milestone 2
 
-A shared test place: a rim town of 8 player plots around the Hollow, a 7-layer pit. Lower
+A shared test place: a rim town of 8 player plots around the Hollow, a 10-layer pit. Lower
 a rope from your plot, recover relics from the layers, register them, and display them
 for passive cash. Spend it on longer ropes, faster climbing, and more display slots.
 Built with Luau, Roblox Studio, Rojo, and ProfileStore.
@@ -76,12 +76,12 @@ not in Studio: Rojo overwrites Studio edits to synced scripts.
 | Step | Where | Notes |
 |---|---|---|
 | Self-test | Server Output | Checks claim, registration, display, save, plot, and progression rules on scratch objects (Studio only). |
-| Dev map | `Workspace.HollowboundDevMap` + Terrain, rim at Y=1300 | Built at runtime in Studio only: the rim town on a terrain island in a sea, with 8 plots, houses, and lamps; below it the Hollow, a terrain chasm whose width changes with depth, with 2 ledges per layer, camps (layers 2 to 7), relic spawn points, and each layer's props (see below). Parts are skipped if the map already exists; terrain is skipped if the pit wall already has terrain. |
+| Dev map | `Workspace.HollowboundDevMap` + Terrain, rim at Y=2000 (floor of layer 10 at Y=400) | Built at runtime in Studio only: the rim town on a terrain island in a sea, with 8 plots, houses, and lamps; below it the Hollow, a terrain chasm whose width changes with depth, with 2 ledges per layer, camps (layers 2 to 10), relic spawn points, and each layer's props (see below). Parts are skipped if the map already exists; terrain is skipped if the pit wall already has terrain. |
 | Plots | Rim | Each player gets the lowest free plot and spawns on it. A plot has a rope winch and arm, a registry terminal, 10 pedestals, and 3 upgrade boards. A full server kicks the extra player. |
 | Rope | Winch at the plot edge | First use deploys the rope to your rope length; the next use puts you on it. W / S climb, Space lets go (with a hop toward the wall), F grabs your rope from a ledge. Reaching the top returns you to your plot (the server dismounts you there, so network lag cannot drop you). |
 | Falling | Anywhere | Nothing stops a fall. The server measures each drop: up to about 10 m is safe, 10 to 18 m hurts, and 18.5 m or more (one ledge to the next) is fatal and turns you into a ragdoll. Rope length is what lets you reach deeper layers safely. A depth meter in metres sits at the top of the screen. |
 | Layers | 160 studs each | The server sets `HB_Layer`; the client changes fog and tint and shows a banner. Deeper layers have better relics and higher income multipliers. |
-| Relics | `Config.RelicTypes` | 42 types across six tiers (Common, Uncommon, Mythic, Secret, Divine, Godly). Layers 1-2 hold Common to Secret, layers 3-4 add Divine, layers 5-7 hold every tier with two Divine and two Godly types. A type's tier is fixed and shown on pickup. Every specimen also rolls a visible size (Tiny 0.6x to Colossal 5x, `Config.Sizes`); income scales with size^1.5, so late-game finds earn absurd amounts. Each has its own model (`RelicModels`, 16 shapes from the relic reference sheet), income, and hidden traits. Mythic and up sparkle; Divine and Godly send up a beam of light. |
+| Relics | `Config.RelicTypes` | 70 types across seven tiers (Common, Uncommon, Mythic, Secret, Divine, Eternal, Godly). Layers 1-2 hold Common to Secret, layer 3 adds Divine, layer 4 adds Eternal, layers 5-10 hold every tier (two Divine, one Eternal, two Godly). Divine, Eternal, and Godly only appear as rare spawns (`Config.RareSpawns`: Divine 60% a day, Eternal 22%, Godly 18%), announced to everyone. A type's tier is fixed and shown on pickup. Every specimen also rolls a visible size (Tiny 0.6x to Colossal 5x, `Config.Sizes`); income scales with size^1.5, so late-game finds earn absurd amounts. Each has its own model (`RelicModels`, 16 shapes from the relic reference sheet), income, and hidden traits. Mythic and up sparkle; Divine and Godly send up a beam of light. |
 | Spawns | Ledges | Each layer keeps up to `maxNodes` relics in the world and refills one per tick. Each spawn rolls a tier by weight (60 / 26 / 10 / 3 / 0.8 / 0.2 %, among the tiers that layer has), then one of that layer's relics of that tier. A 1% lucky roll uses a deeper layer's table. |
 | Pickup | ProximityPrompt (E) | Unchanged from milestone 1: living character, 12-stud server range check, non-yielding claim. |
 | Registration | Plot terminal | Secures carried relics and writes them to the save. |
@@ -133,6 +133,21 @@ prompt range. **J** sends one at the next 5-second server-time boundary, for
 simultaneous-pickup tests from two windows. **M** grants `Config.Dev.CashGrant` cash.
 Turn them off with `Config.Dev.EnableDevRemotes = false`.
 
+## 3b. Publish for playtests with friends
+
+1. Build a complete place file (code, Baseplate, SpawnLocation, streaming on):
+   `rojo build publish.project.json -o build/Hollowbound.rbxl`
+2. Open `build/Hollowbound.rbxl` in Studio. Live servers build the map themselves on
+   start (`Config.Dev.BuildMapOnLiveServers`), so there is nothing to bake.
+3. File > Publish to Roblox, then in Game Settings: enable Studio Access to API
+   Services, Max Players 8, Avatar Type R15. Publish again.
+4. On create.roblox.com: fill out the maturity questionnaire, set Privacy to Public.
+5. Admin commands for testing: type `/hb help` in chat (owner only, plus
+   `Config.Admin.UserIds`).
+
+To update: rebuild the file, open it, publish, then shut down old servers from the
+experience page. Purchases need real product and pass ids in `Config.Shop`.
+
 ## 4. Project layout
 
 ```
@@ -144,6 +159,8 @@ src/shared/            ReplicatedStorage.HollowboundShared
   Progression.luau     levels, layer-by-depth, income, cash formatting (pure)
   RopeAnimations.luau  the rope animations (hold, hand over hand) built in code
   Perks.luau           what a player bought, as multipliers (passes, boosts, server luck)
+  PickaxeModels.luau   the ten pickaxes, built from parts (tools and previews)
+  SwingAnimation.luau  the pickaxe swing, built in code
 src/server/            ServerScriptService.HollowboundServer
   init.server.luau     startup order
   PlayerData.luau      ProfileStore schema (PlayerData.Template), load/save, cash
@@ -152,6 +169,10 @@ src/server/            ServerScriptService.HollowboundServer
   RopeService.luau     rope deploy, climb validation
   FallDamage.luau      fall damage and the ragdoll on a fatal fall
   Store.luau           purchases: prompts, receipts, grants, passes, boosts, weekly stock
+  Hauling.luau         the Hauling Rig: lock in, AFK pulls train Speed
+  Arsenal.luau         pickaxes: Forge buy / equip, tools, server-checked swings, dummies
+  Enemies.luau         creatures: spawn, roam, chase, attack, rewards, respawn
+  EnemyModels.luau     the ten creatures, built from parts
   Hollow.luau          locates the pit; depth measurement
   RelicSpawner.luau    layer-based spawn tables
   RelicStore.luau      specimens, inventories, claim, register, place (pure Luau)
@@ -187,6 +208,10 @@ src/client/            StarterPlayerScripts.HollowboundClient
   ShopIcons.luau       small 3D items for menu cards and tabs
   UiTheme.luau         steampunk / medieval UI kit: brass, walnut, leather, parchment, gears
   SprintController.luau Shift to sprint, stamina bar
+  HaulController.luau  Hauling Rig stop input, crate animation, floating Speed gains
+  ForgeMenu.luau       the Forge (pickaxe menu)
+  CombatFx.luau        damage numbers
+  SwingFx.luau         pickaxe swing animation for everyone, hurt flash
   DevKeys.luau         Studio-only K / J / M test keys
 docs/                  design PDF, test checklist
 ```
@@ -216,8 +241,8 @@ docs/                  design PDF, test checklist
 | Type and rarity visible on pickup; traits revealed by appraisal | Delegated. Income uses no traits. |
 | Very rare relics occasionally appear outside their depth | Decided. The 1% chance is Open. |
 | Atmosphere by depth (mist and gardens, luminous caves, dark water and machinery) | Proposed in the record; used for the placeholder layers. |
-| Relic types (Windhook, Echo Lens, Stillbell, Anchor Charm, Pathfinder's Eye, Wayfarer Key) | Proposed examples. Kept, with their IDs, among the 42 catalogue types; no abilities. |
-| 42-relic catalogue and the six rarity tiers | Project owner's relic brief. A type's tier is fixed; specimen quality still varies its hidden traits. Names, numbers, and looks are Open. |
+| Relic types (Windhook, Echo Lens, Stillbell, Anchor Charm, Pathfinder's Eye, Wayfarer Key) | Proposed examples. Kept, with their IDs, among the 70 catalogue types; no abilities. |
+| 70-relic catalogue and the seven rarity tiers (Eternal added later; layers 8-10 added later) | Project owner's relic brief. A type's tier is fixed; specimen quality still varies its hidden traits. Names, numbers, and looks are Open. |
 | Plots, rope progression, displays with passive income, upgrades | Milestone 2 brief. The record lists displays as an Open "home for the collection"; rope-gated depth and passive income are new. |
 | Layer names, rarity tiers, all numbers | Open. Placeholders in `Config`. |
 

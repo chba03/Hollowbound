@@ -33,15 +33,30 @@ type State = {
 }
 
 local states: { [Player]: State } = {}
+local savedCollide: { [Model]: { [BasePart]: boolean } } = {} -- temporary ragdolls only
 
 -- Turns the character into a ragdoll: every joint becomes a loose ball-and-socket
 -- joint and the limbs collide with the ground. Works for Motor6D joints and the newer
--- AnimationConstraint joints.
-function FallDamage.ragdoll(character: Model)
+-- AnimationConstraint joints. `temporary` (a pickaxe knockdown) remembers the parts'
+-- collision so unragdoll can stand the character back up.
+function FallDamage.ragdoll(character: Model, temporary: boolean?)
+	if character:GetAttribute("HB_Ragdolled") then
+		return
+	end
+	character:SetAttribute("HB_Ragdolled", true)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		humanoid.BreakJointsOnDeath = false
 		humanoid.RequiresNeck = false
+	end
+	if temporary then
+		local collide = {}
+		for _, part in character:GetDescendants() do
+			if part:IsA("BasePart") then
+				collide[part] = part.CanCollide
+			end
+		end
+		savedCollide[character] = collide
 	end
 	for _, joint in character:GetDescendants() do
 		local a0: Attachment?, a1: Attachment?
@@ -81,6 +96,34 @@ function FallDamage.ragdoll(character: Model)
 			part.CanCollide = part.Name ~= "HumanoidRootPart"
 		end
 	end
+end
+
+-- Undoes a temporary ragdoll: joints back on, sockets gone, collision restored.
+function FallDamage.unragdoll(character: Model)
+	if not character:GetAttribute("HB_Ragdolled") then
+		return
+	end
+	for _, item in character:GetDescendants() do
+		if item.Name == "RagdollSocket" or item.Name == "RagdollA0" or item.Name == "RagdollA1" then
+			item:Destroy()
+		elseif item:IsA("Motor6D") or item:IsA("AnimationConstraint") then
+			item.Enabled = true
+		end
+	end
+	local collide = savedCollide[character]
+	if collide then
+		for part, was in collide do
+			if part.Parent then
+				part.CanCollide = was
+			end
+		end
+	end
+	savedCollide[character] = nil
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.RequiresNeck = true
+	end
+	character:SetAttribute("HB_Ragdolled", nil)
 end
 
 local function meters(studs: number): number
@@ -157,7 +200,11 @@ function FallDamage.start()
 			reset()
 			local humanoid = character:WaitForChild("Humanoid", 10)
 			if humanoid and humanoid:IsA("Humanoid") then
-				humanoid.BreakJointsOnDeath = false -- a fatal fall ragdolls instead
+				humanoid.BreakJointsOnDeath = false -- every death ragdolls instead
+				humanoid.Died:Connect(function()
+					savedCollide[character] = nil -- a knockdown that ended in death stays down
+					FallDamage.ragdoll(character) -- creatures, resets, anything else
+				end)
 			end
 		end)
 	end

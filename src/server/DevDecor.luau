@@ -7,14 +7,17 @@
 	  4 Glasswood Hollows  tall cup-shaped trees and ice crystals
 	  5 Drowned Terraces   water spilling from ledge to ledge, stepped stone
 	  6 Rootbound Ruins    giant roots, broken buildings, old machinery
-	  7 The Marrow         fibrous strands, glowing pods, a dark hole in the floor
+	  7 The Marrow         fibrous strands, glowing pods
+	  8 Emberdeep Forges   lava falls, glowing magma veins, brass pipes, old furnaces
+	  9 Gloamcap Grotto    giant glowing mushrooms, shelf fungi, hanging glow tendrils
+	 10 The Lumen Core     pale crystal spires, floating stones, light at the very bottom
 
 	Performance rules for everything here:
 	  - Props are anchored, non-colliding, non-queryable, and cast no shadows, so they
 	    cost almost nothing in physics and keep ropes, ledges, and pickups unobstructed.
-	  - Counts are fixed and small (roughly 700 parts for the whole Hollow). Terrain
+	  - Counts are fixed and small (roughly 1000 parts for the whole Hollow). Terrain
 	    (DevTerrain) carries the large shapes.
-	  - Few lights (about 40) and few particle emitters (about 20, low rates).
+	  - Few lights (about 65) and few particle emitters (about 30, low rates).
 	  - Placement is seeded, so every build is identical.
 ]]
 
@@ -502,27 +505,219 @@ local function marrow(f: Folder)
 			light(core, Color3.fromRGB(220, 255, 120), 28, 2)
 		end
 	end
-	-- A dark opening at the very bottom, with motes drifting up out of it.
-	local floor = rimY - #Config.Layers * H.LayerHeight
-	local hole = column(f, "DeepHole", 0.4, 56, Vector3.new(center.X, floor + 0.25, center.Z), Color3.new(0, 0, 0), M.SmoothPlastic)
+end
+
+-- A falling sheet of lava: like waterfall(), glowing orange and slower.
+local function lavafall(parent: Instance, top: Vector3, length: number, width: number)
+	local toCenter = Vector3.new(center.X - top.X, 0, center.Z - top.Z)
+	local facing = if toCenter.Magnitude > 0.1 then CFrame.lookAt(top, top + toCenter) else CFrame.new(top)
+	local lip = prop(parent, "Lavafall", Vector3.new(width, 1, 1.5), facing, Color3.fromRGB(255, 120, 30), M.Neon)
+	local a0 = Instance.new("Attachment")
+	a0.Parent = lip
+	local a1 = Instance.new("Attachment")
+	a1.Position = Vector3.new(0, -length, 0)
+	a1.Parent = lip
+	local beam = Instance.new("Beam")
+	beam.Attachment0 = a0
+	beam.Attachment1 = a1
+	beam.FaceCamera = true
+	beam.Width0 = width
+	beam.Width1 = width * 1.1
+	beam.Texture = SMOKE
+	beam.TextureMode = Enum.TextureMode.Wrap
+	beam.TextureLength = 18
+	beam.TextureSpeed = 0.5
+	beam.Color = ColorSequence.new(Color3.fromRGB(255, 170, 60), Color3.fromRGB(255, 70, 20))
+	beam.Transparency = NumberSequence.new(0.05, 0.25)
+	beam.LightEmission = 1
+	beam.LightInfluence = 0
+	beam.Segments = 1
+	beam.Parent = lip
+	light(lip, Color3.fromRGB(255, 120, 40), 40, 2)
+end
+
+-- Sparks or motes rising from a hidden holder.
+local function rising(parent: Instance, position: Vector3, color: Color3, rate: number, spread: number)
+	local holder = prop(parent, "Sparks", Vector3.one, CFrame.new(position), color)
+	holder.Transparency = 1
 	local emitter = Instance.new("ParticleEmitter")
 	emitter.Texture = SPARKLE
-	emitter.Color = ColorSequence.new(Color3.fromRGB(230, 255, 140))
+	emitter.Color = ColorSequence.new(color)
 	emitter.LightEmission = 1
-	emitter.Size = NumberSequence.new(0.6, 0)
-	emitter.Lifetime = NumberRange.new(6, 10)
-	emitter.Rate = 6
+	emitter.Size = NumberSequence.new(0.5, 0)
+	emitter.Lifetime = NumberRange.new(3, 6)
+	emitter.Rate = rate
 	emitter.Speed = NumberRange.new(3, 7)
-	emitter.SpreadAngle = Vector2.new(25, 25)
-	emitter.EmissionDirection = Enum.NormalId.Right -- the cylinder's X axis points up
-	emitter.Parent = hole
-	for i = 0, 9 do
-		local angle = i / 10 * TAU
-		strand(f, "Fiber", wallPoint(H.LayerHeight * #Config.Layers - 2, angle, 0), polar(27, angle + 0.3, floor + 0.5), rng:NextNumber(1, 2), flesh[rng:NextInteger(1, #flesh)])
+	emitter.SpreadAngle = Vector2.new(spread, spread)
+	emitter.EmissionDirection = Enum.NormalId.Top
+	emitter.Parent = holder
+end
+
+local function emberdeep(f: Folder)
+	local layer = 8
+	local top = layerTop(layer)
+	local ember = Color3.fromRGB(255, 120, 40)
+	-- Lava pouring down the walls onto the first ledge, and on to the second.
+	for i = 0, 5 do
+		local angle = (i / 6) * TAU + math.rad(15)
+		lavafall(f, wallPoint(top, angle, 2), H.LedgeDepths[1], rng:NextNumber(6, 10))
+	end
+	for _ = 1, 3 do
+		lavafall(f, wallPoint(ledgeDepth(layer, 1), rng:NextNumber(0, TAU), 1.5), H.LedgeDepths[2] - H.LedgeDepths[1], rng:NextNumber(5, 8))
+	end
+	-- Glowing magma veins cracking the walls.
+	for _ = 1, 22 do
+		local angle = rng:NextNumber(0, TAU)
+		local depth = top + rng:NextNumber(4, H.LayerHeight - 30)
+		local a = wallPoint(depth, angle, -0.3)
+		local b = wallPoint(depth + rng:NextNumber(12, 34), angle + rng:NextNumber(-0.08, 0.08), -0.3)
+		strand(f, "MagmaVein", a, b, rng:NextNumber(0.5, 1.1), ember, M.Neon)
+	end
+	-- Old furnaces with glowing mouths and chimneys on the ledges.
+	for i = 1, 10 do
+		local angle = rng:NextNumber(0, TAU)
+		local base = ledgePoint(layer, (i % 2) + 1, angle, rng:NextNumber(0.65, 0.9))
+		local facing = CFrame.lookAt(base, base + inward(angle))
+		local brick = shade(Color3.fromRGB(70, 52, 46), 0.05)
+		prop(f, "Furnace", Vector3.new(8, 7, 7), facing * CFrame.new(0, 3.5, 0), brick, M.Brick)
+		local mouth = prop(f, "FurnaceMouth", Vector3.new(3.6, 2.6, 0.3), facing * CFrame.new(0, 2.6, -3.55), ember, M.Neon)
+		column(f, "Chimney", 14, 2.4, (facing * CFrame.new(2, 14, 1.5)).Position, shade(brick, 0.04), M.Brick)
+		prop(f, "ChimneyCap", Vector3.new(3.4, 0.6, 3.4), facing * CFrame.new(2, 21.3, 1.5), Color3.fromRGB(150, 110, 60), M.CorrodedMetal)
+		if i % 2 == 0 then
+			rising(f, (facing * CFrame.new(2, 22, 1.5)).Position, ember, 4, 15)
+		end
+		if i % 3 == 0 then
+			light(mouth, ember, 26, 1.6)
+		end
+	end
+	-- Brass steam pipes running down the walls.
+	for _ = 1, 10 do
+		local angle = rng:NextNumber(0, TAU)
+		local depth = top + rng:NextNumber(0, H.LayerHeight - 70)
+		local a = wallPoint(depth, angle, 1)
+		local b = wallPoint(depth + rng:NextNumber(40, 70), angle, 1)
+		strand(f, "Pipe", a, b, rng:NextNumber(1.6, 2.4), Color3.fromRGB(176, 136, 72), M.Metal)
+		ball(f, "PipeValve", 3, (a + b) / 2, Color3.fromRGB(130, 96, 52), M.CorrodedMetal)
+	end
+	for ledge = 1, #H.LedgeDepths do
+		for _ = 1, 2 do
+			lantern(f, ledgePoint(layer, ledge, rng:NextNumber(0, TAU), 0.97) + Vector3.new(0, 5, 0), Color3.fromRGB(255, 150, 70))
+		end
 	end
 end
 
-local BUILDERS = { gardens, hangingWood, veilfall, glasswood, drownedTerraces, rootboundRuins, marrow }
+local function gloamcap(f: Folder)
+	local layer = 9
+	local top = layerTop(layer)
+	local glows = { Color3.fromRGB(170, 120, 255), Color3.fromRGB(120, 255, 210), Color3.fromRGB(255, 130, 230) }
+	local stemColor = Color3.fromRGB(205, 190, 220)
+	local function mushroom(base: Vector3, height: number, width: number, lit: boolean)
+		local glow = glows[rng:NextInteger(1, #glows)]
+		column(f, "Stem", height, math.max(1.2, width / 6), base + Vector3.new(0, height / 2, 0), shade(stemColor, 0.05), M.SmoothPlastic)
+		local capPosition = base + Vector3.new(0, height, 0)
+		local cap = prop(f, "Cap", Vector3.new(width, width * 0.38, width), CFrame.new(capPosition), shade(Color3.fromRGB(95, 60, 140), 0.06), M.SmoothPlastic, Enum.PartType.Ball)
+		local gills = column(f, "Gills", 0.4, width * 0.9, capPosition - Vector3.new(0, width * 0.1, 0), glow, M.Neon)
+		gills.Transparency = 0.2
+		for _ = 1, 4 do
+			local a = rng:NextNumber(0, TAU)
+			local spot = capPosition + Vector3.new(math.cos(a) * width * 0.25, width * 0.15, math.sin(a) * width * 0.25)
+			ball(f, "Spot", width * rng:NextNumber(0.08, 0.14), spot, glow, M.Neon)
+		end
+		if lit then
+			light(cap, glow, width * 2.2, 1.8)
+		end
+	end
+	for ledge = 1, #H.LedgeDepths do
+		for i = 1, 8 do
+			local base = ledgePoint(layer, ledge, rng:NextNumber(0, TAU), rng:NextNumber(0.55, 0.92))
+			mushroom(base, rng:NextNumber(5, 14), rng:NextNumber(5, 11), i % 3 == 0)
+		end
+	end
+	-- Giant mushrooms rising from the lower ledge.
+	for _ = 1, 4 do
+		local base = ledgePoint(layer, 2, rng:NextNumber(0, TAU), 0.88)
+		mushroom(base, rng:NextNumber(45, 70), rng:NextNumber(22, 30), true)
+	end
+	-- Shelf fungi stepping up the walls.
+	for _ = 1, 18 do
+		local angle = rng:NextNumber(0, TAU)
+		local depth = top + rng:NextNumber(6, H.LayerHeight - 6)
+		local width = rng:NextNumber(4, 8)
+		local shelf = column(f, "ShelfFungus", 0.8, width, wallPoint(depth, angle, width * 0.3), shade(glows[rng:NextInteger(1, #glows)], 0.1), M.Neon)
+		shelf.Transparency = 0.25
+	end
+	-- Glowing tendrils hanging down the walls.
+	for _ = 1, 16 do
+		local angle = rng:NextNumber(0, TAU)
+		local depth = top + rng:NextNumber(0, H.LayerHeight - 40)
+		local a = wallPoint(depth, angle, 0.5)
+		strand(f, "Tendril", a, a - Vector3.new(0, rng:NextNumber(10, 26), 0), rng:NextNumber(0.3, 0.6), glows[rng:NextInteger(1, #glows)], M.Neon)
+	end
+	for i = 1, 4 do
+		mist(f, ledgePoint(layer, (i % 2) + 1, rng:NextNumber(0, TAU), 0.8) + Vector3.new(0, 3, 0), 14, 2, Color3.fromRGB(150, 110, 220))
+	end
+end
+
+local function lumenCore(f: Folder)
+	local layer = 10
+	local top = layerTop(layer)
+	local pale, gold = Color3.fromRGB(250, 246, 232), Color3.fromRGB(255, 220, 140)
+	-- Pale crystal spires on the ledges.
+	for i = 1, 18 do
+		local angle = rng:NextNumber(0, TAU)
+		local base = ledgePoint(layer, (i % 2) + 1, angle, rng:NextNumber(0.6, 1))
+		local first
+		for _ = 1, 3 do
+			local target = base + inward(angle) * rng:NextNumber(1, 4) + Vector3.new(rng:NextNumber(-2, 2), rng:NextNumber(6, 10), rng:NextNumber(-2, 2))
+			local crystal = spike(f, "Spire", base, target, rng:NextNumber(1.4, 2.8), rng:NextNumber(8, 22), shade(pale, 0.04), M.Glass)
+			crystal.Transparency = 0.15
+			first = first or crystal
+		end
+		if i % 3 == 0 then
+			light(first, gold, 30, 1.8)
+		end
+	end
+	-- Floating stones with glowing seams near the walls.
+	for i = 1, 14 do
+		local angle = rng:NextNumber(0, TAU)
+		local depth = top + rng:NextNumber(10, H.LayerHeight - 20)
+		local size = rng:NextNumber(4, 9)
+		local cframe = CFrame.new(wallPoint(depth, angle, size + 6)) * CFrame.Angles(rng:NextNumber(0, 1), rng:NextNumber(0, TAU), 0)
+		local stone = prop(f, "FloatingStone", Vector3.new(size, size * 0.7, size), cframe, shade(Color3.fromRGB(225, 218, 200), 0.05), M.Limestone)
+		prop(f, "Seam", Vector3.new(size * 1.02, 0.3, size * 1.02), cframe, gold, M.Neon)
+		if i % 4 == 0 then
+			light(stone, gold, 24, 1.4)
+		end
+	end
+	-- Golden light running up the walls.
+	for i = 0, 7 do
+		local angle = (i / 8) * TAU + math.rad(10)
+		strand(f, "LightVein", wallPoint(top + H.LayerHeight - 4, angle, -0.3), wallPoint(top + 6, angle + 0.05, -0.3), 0.6, gold, M.Neon)
+	end
+	-- The light at the very bottom: a glowing core half sunk in the floor, with motes
+	-- drifting up out of it and light roots running to it from the walls.
+	local floor = rimY - #Config.Layers * H.LayerHeight
+	local core = ball(f, "LumenCore", 38, Vector3.new(center.X, floor - 4, center.Z), Color3.fromRGB(255, 244, 205), M.Neon)
+	light(core, gold, 60, 3)
+	ball(f, "LumenHalo", 46, core.Position, gold, M.Glass).Transparency = 0.75
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Texture = SPARKLE
+	emitter.Color = ColorSequence.new(Color3.fromRGB(255, 240, 180))
+	emitter.LightEmission = 1
+	emitter.Size = NumberSequence.new(0.7, 0)
+	emitter.Lifetime = NumberRange.new(6, 10)
+	emitter.Rate = 8
+	emitter.Speed = NumberRange.new(3, 7)
+	emitter.SpreadAngle = Vector2.new(25, 25)
+	emitter.EmissionDirection = Enum.NormalId.Top
+	emitter.Parent = core
+	for i = 0, 9 do
+		local angle = i / 10 * TAU
+		strand(f, "LightRoot", wallPoint(H.LayerHeight * #Config.Layers - 2, angle, 0), polar(18, angle + 0.3, floor + 0.5), rng:NextNumber(0.6, 1.2), gold, M.Neon)
+	end
+end
+
+local BUILDERS = { gardens, hangingWood, veilfall, glasswood, drownedTerraces, rootboundRuins, marrow, emberdeep, gloamcap, lumenCore }
 
 function DevDecor.build(map: Instance, theCenter: Vector3)
 	center = theCenter

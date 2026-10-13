@@ -107,6 +107,32 @@ function BUILDERS.crate(m: Model)
 	add(m, Enum.PartType.Block, Vector3.new(0.7, 0.7, 0.2), CFrame.new(0, 1.2, -1.25) * CFrame.Angles(0, 0, math.pi / 4), Color3.fromRGB(170, 100, 255), M.Neon)
 end
 
+-- A ViewportFrame showing `model`, framed from `direction` (default: front, above).
+function ShopIcons.fromModel(parent: Instance, model: Model, size: UDim2, position: UDim2, z: number?, direction: Vector3?): ViewportFrame
+	local viewport = Instance.new("ViewportFrame")
+	viewport.Name = "Icon"
+	viewport.BackgroundTransparency = 1
+	viewport.Size = size
+	viewport.Position = position
+	viewport.AnchorPoint = Vector2.new(0.5, 0.5)
+	viewport.Ambient = Color3.fromRGB(150, 130, 110)
+	viewport.LightColor = Color3.fromRGB(255, 236, 200)
+	viewport.LightDirection = Vector3.new(-1, -1.5, -0.6)
+	viewport.ZIndex = z or 3
+	viewport.Parent = parent
+	model.Parent = viewport
+	local cframe, extent = model:GetBoundingBox()
+	local radius = extent.Magnitude / 2
+	local camera = Instance.new("Camera")
+	camera.FieldOfView = 30
+	local distance = radius / math.tan(math.rad(camera.FieldOfView / 2)) * 1.05
+	local look = (direction or Vector3.new(0.45, 0.5, -1)).Unit
+	camera.CFrame = CFrame.lookAt(cframe.Position + look * distance, cframe.Position)
+	camera.Parent = viewport
+	viewport.CurrentCamera = camera
+	return viewport
+end
+
 -- Fills `parent` with a ViewportFrame showing the `kind` item. Returns the frame.
 function ShopIcons.make(parent: Instance, kind: string, size: UDim2, position: UDim2, z: number?): ViewportFrame
 	local viewport = Instance.new("ViewportFrame")

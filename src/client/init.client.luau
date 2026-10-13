@@ -8,9 +8,16 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
+local TextChatService = game:GetService("TextChatService")
 
+local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
 local Net = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Net"))
+local CombatFx = require(script.CombatFx)
 local DevKeys = require(script.DevKeys)
+local ForgeMenu = require(script.ForgeMenu)
+local HaulController = require(script.HaulController)
+local Knockdown = require(script.Knockdown)
 local Hud = require(script.Hud)
 local DepthVeil = require(script.DepthVeil)
 local LayerEffects = require(script.LayerEffects)
@@ -19,6 +26,7 @@ local RelicSpin = require(script.RelicSpin)
 local RopeController = require(script.RopeController)
 local RopePose = require(script.RopePose)
 local ShopMenu = require(script.ShopMenu)
+local SwingFx = require(script.SwingFx)
 local SprintController = require(script.SprintController)
 local UpgradeBoards = require(script.UpgradeBoards)
 
@@ -34,6 +42,7 @@ local function refreshStats()
 		income = player:GetAttribute("HB_Income"),
 		ropeLength = player:GetAttribute("HB_RopeLength"),
 		ropeSpeed = player:GetAttribute("HB_RopeSpeed"),
+		speed = player:GetAttribute("HB_Speed"),
 		slots = player:GetAttribute("HB_Slots"),
 		slotsUsed = slotsUsed,
 		deepest = player:GetAttribute("HB_Deepest"),
@@ -57,8 +66,29 @@ remotes:WaitForChild(Net.Notify).OnClientEvent:Connect(function(text, kind)
 	hud:toast(text, kind)
 end)
 
+-- Announcements show on screen and also go into the chat, so anyone who missed the
+-- card can scroll back to it. Local system messages: nothing is sent to other players.
+local function announceInChat(title: string, subtitle: string, rarity: string?)
+	local tier = rarity and Config.RarityById[rarity]
+	local color = if tier then tier.color else Color3.fromRGB(255, 214, 120)
+	local text = `[{title}] {subtitle}`
+	local ok = pcall(function()
+		local channels = TextChatService:FindFirstChild("TextChannels")
+		local channel = channels and (channels:FindFirstChild("RBXGeneral") or channels:FindFirstChild("RBXSystem"))
+		assert(channel and channel:IsA("TextChannel"), "no text channel")
+		local safe = string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;")
+		channel:DisplaySystemMessage(`<font color="#{color:ToHex()}"><b>{safe}</b></font>`)
+	end)
+	if not ok then
+		pcall(function()
+			StarterGui:SetCore("ChatMakeSystemMessage", { Text = text, Color = color, Font = Enum.Font.GothamBold })
+		end)
+	end
+end
+
 remotes:WaitForChild(Net.Announce).OnClientEvent:Connect(function(title, subtitle, rarity)
 	hud:announce(title, subtitle, rarity)
+	announceInChat(title, subtitle, rarity)
 end)
 
 local function refreshZone()
@@ -68,7 +98,7 @@ player:GetAttributeChangedSignal("HB_Zone"):Connect(refreshZone)
 player:GetAttributeChangedSignal("HB_Layer"):Connect(refreshZone)
 refreshZone()
 
-for _, name in { "HB_Cash", "HB_Income", "HB_RopeLength", "HB_RopeSpeed", "HB_Slots", "HB_Deepest" } do
+for _, name in { "HB_Cash", "HB_Income", "HB_RopeLength", "HB_RopeSpeed", "HB_Slots", "HB_Deepest", "HB_Speed" } do
 	player:GetAttributeChangedSignal(name):Connect(refreshStats)
 end
 refreshStats()
@@ -93,6 +123,11 @@ NightEffects.start(hud)
 RopeController.start(remotes, hud)
 RopePose.start()
 SprintController.start(remotes, hud)
+HaulController.start(remotes, hud)
 ShopMenu.start(remotes)
+ForgeMenu.start(remotes)
+CombatFx.start(remotes)
+Knockdown.start(remotes)
+SwingFx.start()
 task.spawn(UpgradeBoards.start, remotes)
 DevKeys.start(remotes, hud)

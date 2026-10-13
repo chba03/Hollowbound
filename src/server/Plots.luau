@@ -10,6 +10,8 @@
 	  Pedestal1..PedestalN    display pedestals, N = Config.Base.PedestalCount
 	  UpgradeRopeLength, UpgradeRopeSpeed, UpgradeBaseSlots   upgrade prompts
 	  Sign                    BasePart holding a BillboardGui with a TextLabel
+	  HaulHandle, HaulCrate   the Hauling Rig: rope end you pull, crate that rises
+	                          (HaulCrate has a RestY attribute)
 
 	The allocator itself is plain Luau so the self-test can check it.
 ]]

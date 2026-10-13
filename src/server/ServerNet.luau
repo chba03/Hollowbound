@@ -40,6 +40,11 @@ function ServerNet.start(theStore)
 	make("RemoteEvent", Net.Sprint, folder)
 	make("RemoteEvent", Net.BuyUpgrade, folder)
 	make("RemoteEvent", Net.ShopBuy, folder)
+	make("RemoteEvent", Net.HaulStop, folder)
+	make("RemoteEvent", Net.ForgeBuy, folder)
+	make("RemoteEvent", Net.ForgeEquip, folder)
+	make("RemoteEvent", Net.HitShown, folder)
+	make("RemoteEvent", Net.Knockback, folder)
 	if Config.Dev.EnableDevRemotes and RunService:IsStudio() then
 		make("RemoteEvent", Net.DevPickupRequest, folder)
 		make("RemoteEvent", Net.DevGrantCash, folder)
@@ -74,6 +79,11 @@ end
 -- A big message on every player's screen. rarity (a tier id) colours it.
 function ServerNet.announceAll(title: string, subtitle: string, rarity: string?)
 	remotes[Net.Announce]:FireAllClients(title, subtitle, rarity)
+end
+
+-- The remote object itself (for server -> client events), or nil.
+function ServerNet.remote(name: string): Instance?
+	return remotes[name]
 end
 
 -- Connects a handler to a client -> server remote. Dev remotes may not exist.

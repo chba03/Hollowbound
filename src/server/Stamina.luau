@@ -10,6 +10,9 @@
 
 	Published attributes for the HUD: HB_Stamina (0..MaxStamina, whole numbers) and
 	HB_Sprinting (bool). Open: every number in Config.Sprint.
+
+	Climb speed adds a very small, uncapped bonus to walk/sprint speed and stamina
+	(Config.Speed.MovePerClimb, StaminaPerClimb), from Speed (HB_Speed) and climb perks.
 ]]
 
 local Players = game:GetService("Players")
@@ -20,6 +23,7 @@ local Shared = ReplicatedStorage:WaitForChild("HollowboundShared")
 local Config = require(Shared:WaitForChild("Config"))
 local Net = require(Shared:WaitForChild("Net"))
 local Perks = require(Shared:WaitForChild("Perks"))
+local Progression = require(Shared:WaitForChild("Progression"))
 local Characters = require(script.Parent.Characters)
 local ServerNet = require(script.Parent.ServerNet)
 
@@ -55,16 +59,33 @@ local function humanoidOf(player: Player): Humanoid?
 	return character and character:FindFirstChildOfClass("Humanoid")
 end
 
+-- Uncapped climb speed above the base (studs/s), for the walk and stamina bonuses.
+local function climbGain(player: Player): number
+	local speed = player:GetAttribute("HB_Speed")
+	return Progression.uncappedClimbGain(if typeof(speed) == "number" then speed else 0, Perks.climb(player))
+end
+
+local function walkSpeed(player: Player, sprinting: boolean): number
+	local base = if sprinting then Config.Sprint.SprintSpeed else Config.Sprint.WalkSpeed
+	return base * (1 + Config.Speed.MovePerClimb * climbGain(player))
+end
+
+-- Sets WalkSpeed only when it changes (other code may read it).
+local function applySpeed(player: Player, sprinting: boolean)
+	local humanoid = humanoidOf(player)
+	local speed = walkSpeed(player, sprinting)
+	if humanoid and math.abs(humanoid.WalkSpeed - speed) > 0.01 then
+		humanoid.WalkSpeed = speed
+	end
+end
+
 local function setSprinting(player: Player, state: State, sprinting: boolean)
 	if state.sprinting == sprinting then
 		return
 	end
 	state.sprinting = sprinting
 	player:SetAttribute("HB_Sprinting", sprinting)
-	local humanoid = humanoidOf(player)
-	if humanoid then
-		humanoid.WalkSpeed = if sprinting then Config.Sprint.SprintSpeed else Config.Sprint.WalkSpeed
-	end
+	applySpeed(player, sprinting)
 end
 
 local function publish(player: Player, state: State)
@@ -85,15 +106,17 @@ local function step(player: Player, state: State, dt: number, now: number)
 	local canStart = state.sprinting or state.stamina >= cfg.MinToStart
 	local sprinting = root ~= nil and state.wants and moving and not onRope and state.stamina > 0 and canStart
 	setSprinting(player, state, sprinting)
+	applySpeed(player, state.sprinting)
 
+	local lungs = 1 + Config.Speed.StaminaPerClimb * climbGain(player)
 	if sprinting then
-		state.stamina = math.max(0, state.stamina - cfg.DrainPerSecond * Perks.staminaDrain(player) * dt)
+		state.stamina = math.max(0, state.stamina - cfg.DrainPerSecond * Perks.staminaDrain(player) / lungs * dt)
 		state.lastDrain = now
 		if state.stamina <= 0 then
 			setSprinting(player, state, false)
 		end
 	elseif now - state.lastDrain >= cfg.RegenDelay then
-		state.stamina = math.min(cfg.MaxStamina, state.stamina + cfg.RegenPerSecond * Perks.staminaRegen(player) * dt)
+		state.stamina = math.min(cfg.MaxStamina, state.stamina + cfg.RegenPerSecond * Perks.staminaRegen(player) * lungs * dt)
 	end
 	publish(player, state)
 end
@@ -110,7 +133,7 @@ function Stamina.start()
 		player:SetAttribute("HB_Sprinting", false)
 		local humanoid = character:WaitForChild("Humanoid", 10)
 		if humanoid and humanoid:IsA("Humanoid") then
-			humanoid.WalkSpeed = Config.Sprint.WalkSpeed
+			humanoid.WalkSpeed = walkSpeed(player, false)
 		end
 	end
 	local function onPlayer(player: Player)

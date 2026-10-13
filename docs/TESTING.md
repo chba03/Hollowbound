@@ -9,7 +9,7 @@
    - [ ] `Self-test finished: N/N passed` with no `FAIL` lines
    - [ ] `Built dev map parts in ...s` and `Built dev map terrain in ...s` (skipped if the
          map was baked into the place)
-   - [ ] `Relic spawner: 70 spawn points across 7 layers`
+   - [ ] `Relic spawner: 100 spawn points across 10 layers`
    - [ ] `Assigned plot 1 to Player1` and `Assigned plot 2 to Player2`
    - [ ] `Loaded data for Player1 (store: NoAccess)` (or `Access` on a published place
          with API access)
@@ -73,6 +73,50 @@
       end of the plank walkway: `F: grab your rope` appears, and F puts you on the rope.
       Climbing past the walkways never bumps into them.
 
+## 3a. Hauling Rig and Speed
+- [ ] Each base has a Hauling Rig left of the deck: timber frame, pulley, a rope with a
+      handle on the near side and a crate on the far side.
+- [ ] Only your own rig shows a **Haul rope** prompt. Hold E: you snap into place facing
+      the rope and are locked there. With no input at all, it hauls twice a second:
+      blue `+N Speed` numbers float up, your character pulls hand over hand on the rope,
+      and the crate rises a step per pull and drops after ten.
+- [ ] Any movement key, Space, the gamepad stick, or the **Stop hauling** button lets go
+      and you can walk again. Dying or resetting also lets go.
+- [ ] The stats panel shows `Speed: N` and `climb N studs/s`; climb speed rises with
+      Speed (16 at 0, about 52 at 1K, 88 at 1M) and on the rope you really climb faster.
+- [ ] The **Climb speed** upgrade board now shows `Nx per pull`: buying it multiplies
+      the Speed each pull gives (it no longer changes climb speed directly).
+- [ ] The player list (Tab) shows Speed and Cash for everyone in the server, sorted by
+      Speed. Speed is saved.
+
+## 3c. Pickaxes and the Forge
+- [ ] You spawn with the **Gardener's Pick** in your hotbar (key 1). Equip it: it is held
+      head up. Click: the character winds the pickaxe up overhead and brings it down
+      hard (other players see it too).
+- [ ] Each base has a straw **Training Dummy** near the front right. Swing at it from
+      close in front: orange damage numbers (10) pop up and it heals straight back.
+      Swinging faster than the pickaxe's speed does nothing extra; swinging with your
+      back to it, or from too far, does not hit.
+- [ ] The **Forge** button (under Shop) opens the Forge: ten pickaxe cards with a 3D
+      preview, layer, DAMAGE / SWINGS/S / REACH, and a button. Locked ones read
+      `Reach layer N` until you have been that deep. Buying (green when affordable)
+      equips it and replaces the tool in your hotbar. Owned ones can be re-equipped.
+- [ ] Getting on the rope or the Hauling Rig puts the pickaxe away.
+- [ ] At the Hauling Rig the legs and feet stay still while the arms pull.
+
+## 3d. Creatures
+- [ ] Each layer has three creatures roaming its ledges, matching the layer: Mosshopper
+      (green, hops) in 1, Barkcrawler (bark spider) in 2, Spray Wraith (floating mist) in
+      3, Shardback (ice beetle with glowing spines) in 4, Murkfin (fish) in 5, Clockwork
+      Sentinel (brass golem) in 6, Marrow Wyrm (pale crawler, glowing pods) in 7.
+- [ ] Walk near one on its ledge: it chases you and attacks in reach (the screen edges
+      flash red). Sprinting gets away; it gives up far from where it started.
+- [ ] It never follows you into a camp's yellow ring, and never reaches you on the rope.
+- [ ] Hit it with your pickaxe: damage numbers, a health bar over it, and about six hits
+      with that layer's pickaxe kill it (`Defeated a ...: +$N`). It fades out and a new
+      one appears somewhere on the layer about 25 seconds later.
+- [ ] Dying to a creature (or any way) ragdolls you, then you respawn at your base.
+
 ## 3b. Sprint
 - [ ] Hold **Left Shift** while moving: you run faster and a stamina bar appears above
       the hints (yellow while sprinting). It empties in about 4.5 seconds and you slow
@@ -106,7 +150,7 @@
       name); bigger ones show a higher $/s in the prompt. Most are Common (grey light) or Uncommon (green);
       Mythic (purple) and Secret (red) sparkle; Divine (gold) and Godly (cyan, rainbow
       sparkles) send up a beam of light. Server Output shows `Self-test` lines for the
-      42-type catalogue passing.
+      70-type catalogue passing.
 - [ ] Hold **E** on a relic: `Picked up ... Unsecured until registered at your base's
       terminal.` The relics panel shows it as **UNSECURED** with its layer and the income
       it would earn on display.
@@ -194,3 +238,59 @@ Settings > Security > Enable Studio Access to API Services**, then:
 - [ ] The Output windows show no errors. `Rope snap-back` lines should not appear during
       normal climbing.
 - [ ] Player1 never sees Player2's relics in their panel.
+
+## 3e. Climbing fatigue and marked carriers
+- Without an Eternal or Godly relic you climb freely, however deep you went.
+- Pick up an Eternal or Godly relic at, say, 135 m, then climb up: at 35 m the rope stops
+  you and the hint says "The rare relic weighs you down: rest at a camp to climb higher."
+  Above that, the hint shows how many metres you have left. Registering it lifts the limit.
+- Stand inside a camp's yellow ring for 5 seconds: "Rested" appears and you can climb
+  100 m above the camp. Going back to town resets everything.
+- Pick up a Divine or Godly relic (the dev keys can spawn one): everyone sees an
+  announcement naming you, the relic, and the layer, and you glow red through walls.
+  Register it at your terminal and the glow goes within a second.
+
+## 3f. Layers 8-10, Eternal, and rare spawns
+- Climb (or dev-teleport) below layer 7: Emberdeep Forges (lava falls, furnaces, orange
+  haze), Gloamcap Grotto (glowing mushrooms, violet haze), and The Lumen Core (pale
+  spires, floating stones, a glowing core on the floor). Each has its creature
+  (Slagcrab, Gloam Stalker, Lumen Seraph) and a camp.
+- The rope board goes to level 14 (250Qa, 5Qi, 100Qi for the last three); the Forge
+  shows Emberhammer, Gloamreaver, and Dawnbreaker.
+- Normal refills never give Divine, Eternal, or Godly. The output shows
+  `Rare spawn: <tier> in layer N` when one rolls (Divine about 60% a day). To test,
+  set `Config.RareSpawns.Tiers[1].perDay` to 0.999 and RollSeconds to 10.
+- Eternal relics are orange, rank between Divine and Godly, and appear from layer 4 down.
+
+## 3g. Grapple and announcements in chat
+- Every announcement (night, dawn, rare spawns, crate finds, rare pickups) also appears in
+  the chat window in its tier colour.
+- Buy the Grappling Hook in the Forge (Climbing Gear, $100K). It's a second hotbar tool.
+- Drop past the end of your rope onto a ledge, equip the hook, click: a line shoots to
+  the ledge ring above and you're hauled up onto it. Click again in the same 100 m band:
+  "Your grapple is spent for 100-200 m". Go deeper into the next band and it works again;
+  a trip to town resets every band.
+- On the rope, in town, or above the first ledge it refuses with a message.
+
+## 3h. Admin commands (live servers)
+- As the owner, type `/hb help`: a pop-up lists the commands; F9 > Server log has usage.
+- `/hb cash 5qi`, `/hb rope 14`, `/hb max`, `/hb layer 10`, `/hb rare godly`,
+  `/hb night`, `/hb dawn`, `/hb home`, `/hb heal`, `/hb gear`, `/hb speed 1m`.
+- Add a friend's name at the end to target them (`/hb max alex`).
+- A non-admin typing `/hb cash 1e18` gets nothing, and the text never shows in chat.
+
+
+## 3i. PvP knockdown, shared ropes, swing on live servers
+Use Test > Clients and Servers with 2 players, and repeat once on the published game.
+- Swing a pickaxe: the arm swing plays for you and the other player sees it (Studio
+  and live). Works on R15 and R6 avatars.
+- In the Hollow, hit the other player: they ragdoll, fly back, and stand up after about
+  1.6 s. Hitting again straight away does nothing (immunity). No damage taken.
+- In town (bases, rim) or while they're on a rope: hits do nothing.
+- Join: your rope is already down; the winch says "Climb down".
+- Stand near another player's rope in the pit: hint "F: grab <name>'s rope (climb up
+  only)". On it, S does nothing and W climbs; at the top you land on your own base.
+  If the owner leaves, you fall off.
+- `/hb speed 1t`: walking and sprinting are slightly faster and stamina lasts a bit
+  longer (about +7% speed, +10% stamina). It keeps growing past the climb cap:
+  `/hb speed 1dc` is faster again.

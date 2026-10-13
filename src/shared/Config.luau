@@ -8,7 +8,7 @@
 	  Open      - still needs a decision or testing
 	Every number in this file is a placeholder for testing, not a balance decision.
 
-	Milestone 2 adds the rim town (8 plots), the Hollow (7 layers), rope progression,
+	Milestone 2 adds the rim town (8 plots), the Hollow (10 layers), rope progression,
 	relic displays with passive income, and saved player data. Those come from the
 	project owner's milestone 2 brief. The design record lists displays as an Open
 	"home for the collection"; rope-gated depth and passive income are new to this brief.
@@ -17,10 +17,15 @@
 local Config = {}
 
 -- Rarity tiers, from the project owner's relic brief: Common, Uncommon, Mythic,
--- Secret, Divine, Godly. Every relic type belongs to exactly one tier, shown on pickup.
+-- Secret, Divine, Eternal, Godly. Every relic type belongs to exactly one tier, shown
+-- on pickup. Eternal (project owner) sits between Divine and Godly, a little less rare
+-- than Godly, and spawns from layer 4 down.
 -- Open: tier names stay as briefed; weights, income, and colours are placeholders.
---   weight  = spawn chance relative to the other tiers in the same layer (percent);
---             layers 1-2 have no Divine or Godly relics and layers 3-4 no Godly
+--   weight  = spawn chance relative to the other tiers in the same layer (percent).
+--             Divine, Eternal, and Godly have weight 0: they never come from the
+--             normal refills, only from rare spawns (Config.RareSpawns), so they stay
+--             rare. Layers 1-2 have no Divine, Eternal, or Godly relics, layer 3 only
+--             Divine, and layer 4 no Godly
 --   income  = base cash per second on display, before the type and layer multipliers
 --   quality = bonus added to the layer's specimen quality band (better hidden traits)
 --   light / sparkle / pillar / scale = how the relic shows in the world
@@ -29,8 +34,9 @@ Config.Rarities = {
 	{ id = "Uncommon", weight = 26, income = 3, quality = 0.05, color = Color3.fromRGB(100, 210, 120), light = 8, sparkle = 0, pillar = false, scale = 1.05 },
 	{ id = "Mythic", weight = 10, income = 12, quality = 0.1, color = Color3.fromRGB(170, 100, 255), light = 10, sparkle = 2, pillar = false, scale = 1.15 },
 	{ id = "Secret", weight = 3, income = 50, quality = 0.15, color = Color3.fromRGB(255, 70, 110), light = 12, sparkle = 4, pillar = false, scale = 1.25 },
-	{ id = "Divine", weight = 0.8, income = 250, quality = 0.2, color = Color3.fromRGB(255, 215, 90), light = 14, sparkle = 8, pillar = true, scale = 1.35 },
-	{ id = "Godly", weight = 0.2, income = 1500, quality = 0.25, color = Color3.fromRGB(120, 255, 235), light = 18, sparkle = 14, pillar = true, scale = 1.5 },
+	{ id = "Divine", weight = 0, income = 250, quality = 0.2, color = Color3.fromRGB(255, 215, 90), light = 14, sparkle = 8, pillar = true, scale = 1.35 },
+	{ id = "Eternal", weight = 0, income = 700, quality = 0.22, color = Color3.fromRGB(255, 130, 45), light = 16, sparkle = 11, pillar = true, scale = 1.42 },
+	{ id = "Godly", weight = 0, income = 1500, quality = 0.25, color = Color3.fromRGB(120, 255, 235), light = 18, sparkle = 14, pillar = true, scale = 1.5 },
 }
 Config.RarityById = {}
 for index, tier in Config.Rarities do
@@ -72,9 +78,9 @@ Config.Traits = {
 }
 
 --[[
-	The relic catalogue: 42 types. Layers 1-2 hold Common to Secret, layers 3-4 add
-	Divine, and layers 5-7 hold every tier with two Divine and two Godly types each, so
-	each step down and each tier up is worth more.
+	The relic catalogue: 70 types. Layers 1-2 hold Common to Secret, layer 3 adds
+	Divine, layer 4 adds Eternal, and layers 5-10 hold every tier (two Divine, one
+	Eternal, and two Godly types each), so each step down and each tier up is worth more.
 	The six types from the design record's illustrative catalogue (Proposed) keep their
 	IDs and trait IDs so saved specimens still load.
 
@@ -115,6 +121,7 @@ local CATALOGUE = {
 	{ "CupwoodSeed", "Cupwood Seed", 4, "Mythic", 1.15, "podball", rgb(80, 170, 165), rgb(200, 240, 230), M.Glass, { "growth", "cold" }, false, "Seed of the cup trees, glassy and slow." },
 	{ "GlassLattice", "Glass Lattice", 4, "Secret", 1.2, "coil", rgb(190, 235, 250), rgb(120, 190, 220), M.Glass, { "resonance", "stability" }, false, "A cage of crystal threads that rings softly." },
 	{ "RimecallerFang", "Rimecaller Fang", 4, "Divine", 1.25, "bonehook", rgb(225, 240, 250), rgb(120, 180, 230), M.Marble, { "cold", "ward", "reach" }, true, "Frost spreads from wherever it points." },
+	{ "AuroraCrown", "Aurora Crown", 4, "Eternal", 1.3, "ringsphere", rgb(150, 230, 255), rgb(255, 150, 230), M.Glass, { "cold", "glow", "attunement" }, true, "The northern lights, frozen mid-dance." },
 
 	-- Layer 5: Drowned Terraces
 	{ "SiltTablet", "Silt Tablet", 5, "Common", 1.0, "layered", rgb(150, 140, 120), rgb(90, 85, 80), M.Slate, { "memory", "stability" }, false, "Layers of river silt pressed into stone." },
@@ -125,6 +132,7 @@ local CATALOGUE = {
 	{ "Floodcrown", "Floodcrown", 5, "Godly", 1.3, "folded", rgb(70, 140, 150), rgb(200, 255, 245), M.Glass, { "pull", "buoyancy", "vitality" }, true, "Folded water, held in a shape it remembers." },
 	{ "SunkenLantern", "Sunken Lantern", 5, "Divine", 1.35, "bell", rgb(50, 110, 105), rgb(255, 210, 120), M.CorrodedMetal, { "glow", "silence", "memory" }, false, "Still lit after centuries under the water." },
 	{ "Tideheart", "Tideheart", 5, "Godly", 1.4, "ringsphere", rgb(30, 70, 120), rgb(140, 230, 255), M.Glass, { "pull", "buoyancy", "pulse" }, true, "Every terrace fills and drains to its beat." },
+	{ "MaelstromCore", "Maelstrom Core", 5, "Eternal", 1.3, "spiral", rgb(40, 90, 130), rgb(120, 255, 230), M.Glass, { "pull", "buoyancy", "pulse" }, true, "A whirlpool that never stopped turning." },
 
 	-- Layer 6: Rootbound Ruins
 	{ "RustedSeal", "Rusted Seal", 6, "Common", 1.0, "disc", rgb(130, 100, 80), rgb(80, 70, 60), M.CorrodedMetal, { "ward", "memory" }, false, "A stamped seal from a builder no one knows." },
@@ -135,6 +143,7 @@ local CATALOGUE = {
 	{ "FoundersSeal", "Founder's Seal", 6, "Godly", 1.3, "knot", rgb(200, 170, 90), rgb(255, 235, 160), M.Foil, { "ward", "attunement", "memory" }, true, "The mark of whoever built the ruins first." },
 	{ "WardensPrism", "Warden's Prism", 6, "Divine", 1.35, "prism", rgb(230, 170, 70), rgb(255, 240, 190), M.Glass, { "ward", "clarity", "glow" }, true, "It once lit the ruins' great gate." },
 	{ "GearOfAges", "Gear of Ages", 6, "Godly", 1.4, "disc", rgb(205, 165, 70), rgb(120, 90, 50), M.Foil, { "pulse", "memory", "stability" }, true, "Turn it once and the ruins remember being whole." },
+	{ "EverwoundClock", "Everwound Clock", 6, "Eternal", 1.3, "disc", rgb(190, 150, 80), rgb(255, 120, 60), M.Foil, { "pulse", "memory", "stability" }, true, "Its hands move backward, and never slow." },
 
 	-- Layer 7: The Marrow
 	{ "MarrowNodule", "Marrow Nodule", 7, "Common", 1.0, "lumpball", rgb(170, 160, 140), rgb(220, 210, 190), M.Pebble, { "vitality", "pulse" }, false, "Warm, and very faintly beating." },
@@ -142,9 +151,43 @@ local CATALOGUE = {
 	{ "BoundSpiral", "Bound Spiral", 7, "Mythic", 1.15, "spiral", rgb(230, 225, 205), rgb(200, 255, 120), M.Marble, { "pulse", "vitality" }, false, "Bone bands bound around a green glow." },
 	{ "LivingCube", "Living Cube", 7, "Secret", 1.2, "folded", rgb(110, 120, 70), rgb(200, 240, 160), M.Fabric, { "growth", "memory" }, false, "Folds and unfolds itself while you sleep." },
 	{ "MarrowFang", "Marrow Fang", 7, "Divine", 1.25, "bonehook", rgb(235, 230, 215), rgb(90, 80, 70), M.Marble, { "reach", "vitality", "pull" }, true, "Grown, not carved, from something enormous." },
-	{ "UnbornStar", "The Unborn Star", 7, "Godly", 1.3, "ringsphere", rgb(250, 230, 160), rgb(255, 255, 220), M.Neon, { "glow", "vitality", "attunement" }, true, "The light at the very bottom of the Hollow." },
+	{ "UnbornStar", "The Unborn Star", 7, "Godly", 1.3, "ringsphere", rgb(250, 230, 160), rgb(255, 255, 220), M.Neon, { "glow", "vitality", "attunement" }, true, "A light from near the bottom of the Hollow." },
 	{ "SporeSovereign", "Spore Sovereign", 7, "Divine", 1.35, "spikeball", rgb(90, 120, 60), rgb(210, 255, 120), M.Pebble, { "growth", "vitality", "pulse" }, false, "Every spore in the Marrow leans toward it." },
 	{ "Marrowheart", "Marrowheart", 7, "Godly", 1.4, "lumpball", rgb(170, 60, 60), rgb(255, 170, 120), M.Glass, { "vitality", "pulse", "warmth" }, true, "It beats. The whole Hollow beats with it." },
+	{ "FirstHeartbeat", "First Heartbeat", 7, "Eternal", 1.3, "lumpball", rgb(200, 80, 70), rgb(255, 140, 60), M.Glass, { "vitality", "pulse", "warmth" }, true, "The Hollow's oldest pulse, kept in a shell." },
+
+	-- Layer 8: Emberdeep Forges
+	{ "SlagBead", "Slag Bead", 8, "Common", 1.0, "lumpball", rgb(70, 60, 55), rgb(255, 120, 40), M.Basalt, { "warmth", "stability" }, false, "Cooled slag with a coal still glowing inside." },
+	{ "BellowsValve", "Bellows Valve", 8, "Uncommon", 1.1, "cross", rgb(120, 90, 60), rgb(255, 150, 60), M.CorrodedMetal, { "pull", "warmth" }, false, "It breathes in when no one is watching." },
+	{ "CinderCoil", "Cinder Coil", 8, "Mythic", 1.15, "coil", rgb(90, 60, 45), rgb(255, 110, 30), M.Metal, { "warmth", "pulse" }, false, "A spring forged red-hot and never cooled." },
+	{ "MagmaTablet", "Magma Tablet", 8, "Secret", 1.2, "layered", rgb(60, 45, 40), rgb(255, 90, 30), M.CrackedLava, { "memory", "warmth" }, false, "Writing in it flows like lava, then sets." },
+	{ "AnvilSeal", "Anvil Seal", 8, "Divine", 1.25, "knot", rgb(80, 80, 85), rgb(255, 170, 80), M.Metal, { "stability", "ward", "warmth" }, true, "Struck once, it rings for a whole day." },
+	{ "EmberChoir", "Ember Choir", 8, "Divine", 1.35, "bell", rgb(140, 70, 40), rgb(255, 200, 90), M.CorrodedMetal, { "resonance", "warmth", "glow" }, false, "A bell that sings in sparks." },
+	{ "UndyingFlame", "Undying Flame", 8, "Eternal", 1.3, "prism", rgb(255, 120, 40), rgb(255, 230, 150), M.Neon, { "warmth", "glow", "vitality" }, true, "Lit before the Hollow had a name." },
+	{ "Sunforge", "The Sunforge", 8, "Godly", 1.3, "ringsphere", rgb(255, 150, 50), rgb(255, 240, 180), M.Neon, { "warmth", "glow", "efficiency" }, true, "A small sun, hammered into a ring." },
+	{ "MoltenCrown", "Molten Crown", 8, "Godly", 1.4, "folded", rgb(200, 80, 30), rgb(255, 200, 90), M.CrackedLava, { "warmth", "ward", "attunement" }, true, "Still dripping, and never any smaller." },
+
+	-- Layer 9: Gloamcap Grotto
+	{ "Glowcap", "Glowcap", 9, "Common", 1.0, "podball", rgb(110, 80, 140), rgb(190, 140, 255), M.Pebble, { "glow", "growth" }, false, "A mushroom cap that glows when squeezed." },
+	{ "SporeLantern", "Spore Lantern", 9, "Uncommon", 1.1, "bell", rgb(80, 60, 110), rgb(150, 255, 220), M.Glass, { "glow", "silence" }, false, "Spores drift inside like slow fireflies." },
+	{ "GloamThread", "Gloam Thread", 9, "Mythic", 1.15, "spiral", rgb(60, 50, 90), rgb(200, 120, 255), M.Fabric, { "pull", "attunement" }, false, "Fungal silk that pulls toward the dark." },
+	{ "MyceliumEye", "Mycelium Eye", 9, "Secret", 1.2, "disc", rgb(90, 70, 120), rgb(120, 255, 200), M.Slate, { "sight", "memory" }, true, "It sees through every root in the grotto." },
+	{ "DreamSpore", "Dream Spore", 9, "Divine", 1.25, "spikeball", rgb(130, 80, 170), rgb(230, 180, 255), M.Pebble, { "growth", "memory", "clarity" }, false, "Breathe near it and you dream of the deep." },
+	{ "VioletChime", "Violet Chime", 9, "Divine", 1.35, "beads", rgb(120, 70, 180), rgb(220, 190, 255), M.Glass, { "resonance", "glow", "silence" }, false, "Each bead hums a different note." },
+	{ "Nightbloom", "Nightbloom", 9, "Eternal", 1.3, "folded", rgb(70, 40, 110), rgb(255, 140, 240), M.Glass, { "growth", "glow", "vitality" }, true, "A flower that has never closed." },
+	{ "GloamSovereign", "Gloam Sovereign", 9, "Godly", 1.3, "lumpball", rgb(90, 50, 140), rgb(180, 255, 230), M.Neon, { "growth", "attunement", "pulse" }, true, "Every glowing thing in the grotto answers it." },
+	{ "HollowMoon", "Hollow Moon", 9, "Godly", 1.4, "ringsphere", rgb(200, 190, 240), rgb(160, 120, 255), M.Glass, { "glow", "pull", "clarity" }, true, "A moon that only rises underground." },
+
+	-- Layer 10: The Lumen Core
+	{ "LumenShard", "Lumen Shard", 10, "Common", 1.0, "prism", rgb(230, 225, 210), rgb(255, 240, 180), M.Glass, { "glow", "clarity" }, false, "A splinter of the light at the bottom." },
+	{ "HaloDisc", "Halo Disc", 10, "Uncommon", 1.1, "disc", rgb(240, 235, 220), rgb(255, 220, 140), M.Marble, { "ward", "glow" }, false, "A ring of light with nothing holding it up." },
+	{ "Lightspring", "Lightspring", 10, "Mythic", 1.15, "coil", rgb(245, 240, 225), rgb(255, 230, 160), M.Foil, { "pulse", "efficiency" }, false, "A coil of solid light, warm to the touch." },
+	{ "OriginStone", "Origin Stone", 10, "Secret", 1.2, "layered", rgb(220, 215, 200), rgb(255, 250, 220), M.Marble, { "memory", "stability" }, false, "Rock from before the Hollow was dug." },
+	{ "DawnFeather", "Dawn Feather", 10, "Divine", 1.25, "bonehook", rgb(255, 245, 220), rgb(255, 210, 120), M.Marble, { "buoyancy", "glow", "vitality" }, true, "It falls upward, slowly, if you let go." },
+	{ "RadiantCross", "Radiant Cross", 10, "Divine", 1.35, "cross", rgb(240, 230, 200), rgb(255, 240, 170), M.Foil, { "ward", "glow", "attunement" }, true, "It casts no shadow, only light." },
+	{ "EverlightBeads", "Everlight Beads", 10, "Eternal", 1.3, "beads", rgb(255, 250, 235), rgb(255, 180, 90), M.Neon, { "glow", "memory", "vitality" }, true, "Each bead holds a dawn that never ended." },
+	{ "HeartOfTheHollow", "Heart of the Hollow", 10, "Godly", 1.3, "lumpball", rgb(255, 245, 210), rgb(255, 255, 255), M.Neon, { "vitality", "pulse", "attunement" }, true, "The Hollow was dug to keep this hidden." },
+	{ "FirstLight", "The First Light", 10, "Godly", 1.4, "ringsphere", rgb(255, 255, 240), rgb(255, 220, 140), M.Neon, { "glow", "clarity", "pull" }, true, "Everything bright in the world began here." },
 }
 
 Config.RelicTypes = {}
@@ -224,11 +267,15 @@ Config.Hollow = {
 -- supplied for milestone 2 and the record's Proposed "Atmosphere by region" table:
 -- green gardens, an upside-down forest, a great waterfall cliff, a crystal forest of
 -- cup-shaped trees, flooded terraces, root-bound ruins, and a living, glowing deep.
+-- Layers 8-10 (project owner: three more, same style): molten forges, a grotto of
+-- glowing mushrooms, and a pale, light-filled core at the very bottom.
 --   incomeMultiplier = display income scale for relics from that layer. Fitted by a
 --              progression simulation against the rope costs so a typical player
 --              (about one relic a minute, best relics on display) spends about
 --              8 min in layer 1, 25 min in layer 2, 1.5 h in layer 3, 4 h in layer 4,
---              and 12 h of play in each layer after that (about 30 h to layer 7).
+--              and 12 h of play in each layer after that (about 67 h to layer 10).
+--              Refitted for 10 layers with Divine, Eternal, and Godly out of the
+--              normal refills (Config.RareSpawns).
 --   quality  = specimen quality band rolled for relics found in that layer (a
 --              relic's tier adds its own bonus; see Config.Rarities)
 --   radius   = pit radius at the layer's centre (min 120 keeps ropes and ledges clear)
@@ -262,7 +309,7 @@ Config.Layers = {
 	{
 		name = "Veilfall Cliffs",
 		quality = { 0.25, 0.72 },
-		incomeMultiplier = 2300,
+		incomeMultiplier = 3100,
 		maxNodes = 6,
 		radius = 138,
 		fog = Color3.fromRGB(228, 228, 218),
@@ -274,7 +321,7 @@ Config.Layers = {
 	{
 		name = "Glasswood Hollows",
 		quality = { 0.4, 0.82 },
-		incomeMultiplier = 260e3,
+		incomeMultiplier = 540e3,
 		maxNodes = 5,
 		radius = 172,
 		fog = Color3.fromRGB(175, 215, 232),
@@ -286,7 +333,7 @@ Config.Layers = {
 	{
 		name = "Drowned Terraces",
 		quality = { 0.55, 0.9 },
-		incomeMultiplier = 5.4e6,
+		incomeMultiplier = 26e6,
 		maxNodes = 5,
 		radius = 150,
 		fog = Color3.fromRGB(85, 135, 155),
@@ -298,7 +345,7 @@ Config.Layers = {
 	{
 		name = "Rootbound Ruins",
 		quality = { 0.65, 0.96 },
-		incomeMultiplier = 110e6,
+		incomeMultiplier = 340e6,
 		maxNodes = 4,
 		radius = 136,
 		fog = Color3.fromRGB(120, 96, 72),
@@ -310,7 +357,7 @@ Config.Layers = {
 	{
 		name = "The Marrow",
 		quality = { 0.75, 1.0 },
-		incomeMultiplier = 2.1e9,
+		incomeMultiplier = 6.3e9,
 		maxNodes = 4,
 		radius = 124,
 		fog = Color3.fromRGB(180, 150, 105),
@@ -318,6 +365,57 @@ Config.Layers = {
 		brightness = -0.05,
 		density = 0.5,
 		motes = { color = Color3.fromRGB(230, 255, 140), rate = 12, size = 0.35, speed = 0.7, glow = 1 },
+	},
+	{
+		name = "Emberdeep Forges",
+		quality = { 0.8, 1.0 },
+		incomeMultiplier = 110e9,
+		maxNodes = 4,
+		radius = 142,
+		fog = Color3.fromRGB(125, 62, 36),
+		tint = Color3.fromRGB(255, 220, 195),
+		brightness = -0.05,
+		density = 0.5,
+		motes = { color = Color3.fromRGB(255, 140, 50), rate = 14, size = 0.2, speed = 1.6, glow = 1 },
+	},
+	{
+		name = "Gloamcap Grotto",
+		quality = { 0.84, 1.0 },
+		incomeMultiplier = 2.4e12,
+		maxNodes = 4,
+		radius = 158,
+		fog = Color3.fromRGB(62, 44, 92),
+		tint = Color3.fromRGB(228, 210, 255),
+		brightness = -0.07,
+		density = 0.5,
+		motes = { color = Color3.fromRGB(170, 140, 255), rate = 12, size = 0.3, speed = 0.4, glow = 1 },
+	},
+	{
+		name = "The Lumen Core",
+		quality = { 0.88, 1.0 },
+		incomeMultiplier = 55e12,
+		maxNodes = 3,
+		radius = 132,
+		fog = Color3.fromRGB(232, 222, 192),
+		tint = Color3.fromRGB(255, 248, 230),
+		brightness = 0.06,
+		density = 0.42,
+		motes = { color = Color3.fromRGB(255, 238, 185), rate = 14, size = 0.3, speed = 0.6, glow = 1 },
+	},
+}
+
+-- Rare spawns (project owner): Divine, Eternal, and Godly relics never come from the
+-- normal refills. Instead the server rolls for each tier every RollSeconds, with a chance
+-- worked out so the tier appears with `perDay` probability over a day of play (Divine:
+-- 60%, so about one every day or two). A spawn picks a random layer holding that tier,
+-- is announced to everyone, and stays until night. A lit Lucky Lantern multiplies the
+-- chances. Open: every number.
+Config.RareSpawns = {
+	RollSeconds = 60,
+	Tiers = {
+		{ tier = "Divine", perDay = 0.6 },
+		{ tier = "Eternal", perDay = 0.22 },
+		{ tier = "Godly", perDay = 0.18 },
 	},
 }
 
@@ -341,6 +439,26 @@ Config.Camps = {
 	Height = 14,
 	RingColor = Color3.fromRGB(255, 214, 60),
 	RingSegments = 28,
+}
+
+-- Climbing fatigue (server: Ascent; client: RopeController). Only while you carry an
+-- unsecured relic of rank MinRank or higher (project owner: the two rarest tiers,
+-- Eternal and Godly): once you have climbed LimitMeters up from the deepest point since
+-- you picked it up or last rested, you cannot climb higher until you rest in a camp for
+-- RestSeconds. Back in town it resets. Open: every number.
+Config.Ascent = {
+	MinRank = 6, -- Eternal and Godly
+	LimitMeters = 100,
+	RestSeconds = 5,
+	CheckInterval = 0.25,
+}
+
+-- Carrying an unsecured relic of rank MarkRank or higher (5 = Divine) marks you red for
+-- every player until you register it or lose it (server: RelicMarks).
+Config.RelicMark = {
+	MarkRank = 5,
+	Color = Color3.fromRGB(255, 40, 40),
+	CheckInterval = 1,
 }
 
 -- Server-wide announcements for rare spawns: tiers at or above this rank (5 = Divine).
@@ -441,31 +559,31 @@ Config.Shop = {
 		WeekOffset = 4 * 24 * 3600, -- weeks start Monday 00:00 UTC
 		Stock = 3, -- purchases per player per week
 		Offers = {
-			{ id = "EmberCrate", name = "Ember Crate", detail = "A layer 7 relic, Divine or Godly odds x5", icon = "crate", price = 499, productId = 0,
-				kind = "crate", layer = 7, weights = { Common = 30, Uncommon = 28, Mythic = 20, Secret = 14, Divine = 6, Godly = 2 } },
+			{ id = "EmberCrate", name = "Ember Crate", detail = "A layer 7 relic, Divine to Godly odds x5", icon = "crate", price = 499, productId = 0,
+				kind = "crate", layer = 7, weights = { Common = 30, Uncommon = 28, Mythic = 20, Secret = 14, Divine = 6, Eternal = 3, Godly = 2 } },
 			{ id = "MidnightCache", name = "Midnight Cache", detail = "4 hours of income + a Lucky Lantern", icon = "chest", price = 399, productId = 0,
 				kind = "bundle", contents = { { kind = "cash", minutes = 240, minimum = 500000 }, { kind = "serverLuck", minutes = 15 } } },
-			{ id = "DelversKit", name = "Delver's Kit", detail = "+1 rope length, +1 climb speed, a layer 5 crate", icon = "rope", price = 349, productId = 0,
+			{ id = "DelversKit", name = "Delver's Kit", detail = "+1 rope length, +1 climb speed, a layer 5 crate", icon = "rope", price = 349, productId = 3718286466,
 				kind = "bundle", contents = { { kind = "level", upgrade = "RopeLength" }, { kind = "level", upgrade = "RopeSpeed" }, { kind = "crate", layer = 5 } } },
 		},
 	},
 
 	-- Crate tier odds when an item gives none (only tiers the layer holds can come up).
-	CrateWeights = { Common = 45, Uncommon = 30, Mythic = 15, Secret = 7, Divine = 2.4, Godly = 0.6 },
+	CrateWeights = { Common = 45, Uncommon = 30, Mythic = 15, Secret = 7, Divine = 2.4, Eternal = 0.8, Godly = 0.6 },
 
 	Items = {
-		DelversBundle = { name = "Delver's Bundle", detail = "1 hour of income, +1 rope length, a layer 3 crate", icon = "chest", price = 299, productId = 0, tag = "BEST VALUE", wide = true,
+		DelversBundle = { name = "Delver's Bundle", detail = "1 hour of income, +1 rope length, a layer 3 crate", icon = "chest", price = 299, productId = 3718286509, tag = "BEST VALUE", wide = true,
 			kind = "bundle", contents = { { kind = "cash", minutes = 60, minimum = 100000 }, { kind = "level", upgrade = "RopeLength" }, { kind = "crate", layer = 3 } } },
 
-		Pocket = { name = "Pocket of Coins", icon = "coins", price = 49, productId = 0, kind = "cash", minutes = 5, minimum = 5000 },
-		Purse = { name = "Coin Purse", icon = "purse", price = 99, productId = 0, kind = "cash", minutes = 15, minimum = 25000 },
-		HeavyPurse = { name = "Heavy Purse", icon = "purse", price = 249, productId = 0, kind = "cash", minutes = 60, minimum = 100000 },
-		Chest = { name = "Treasure Chest", icon = "chest", price = 499, productId = 0, kind = "cash", minutes = 240, minimum = 500000, wide = true },
-		Vault = { name = "Guild Vault", icon = "chest", price = 799, productId = 0, kind = "cash", minutes = 720, minimum = 2000000, wide = true, tag = "MOST CASH" },
+		Pocket = { name = "Pocket of Coins", icon = "coins", price = 49, productId = 3718286561, kind = "cash", minutes = 5, minimum = 5000 },
+		Purse = { name = "Coin Purse", icon = "purse", price = 99, productId = 3718286599, kind = "cash", minutes = 15, minimum = 25000 },
+		HeavyPurse = { name = "Heavy Purse", icon = "purse", price = 249, productId = 3718286639, kind = "cash", minutes = 60, minimum = 100000 },
+		Chest = { name = "Treasure Chest", icon = "chest", price = 499, productId = 3718286667, kind = "cash", minutes = 240, minimum = 500000, wide = true },
+		Vault = { name = "Guild Vault", icon = "chest", price = 799, productId = 3718286708, kind = "cash", minutes = 720, minimum = 2000000, wide = true, tag = "MOST CASH" },
 
-		RopeLevel = { name = "Steel-Core Rope", icon = "rope", price = 149, productId = 0, kind = "level", upgrade = "RopeLength" },
-		SpeedLevel = { name = "Clockwork Winch", icon = "gear", price = 149, productId = 0, kind = "level", upgrade = "RopeSpeed" },
-		SlotLevel = { name = "Extra Pedestal", icon = "gear", price = 99, productId = 0, kind = "level", upgrade = "BaseSlots" },
+		RopeLevel = { name = "Steel-Core Rope", icon = "rope", price = 149, productId = 3718286738, kind = "level", upgrade = "RopeLength" },
+		SpeedLevel = { name = "Clockwork Winch", icon = "gear", price = 149, productId = 3718286767, kind = "level", upgrade = "RopeSpeed" },
+		SlotLevel = { name = "Extra Pedestal", icon = "gear", price = 99, productId = 3718286797, kind = "level", upgrade = "BaseSlots" },
 
 		MerchantLamp = { name = "Merchant's Lamp", detail = "2x income for 30 min", icon = "lantern", price = 99, productId = 0, kind = "boost", boost = "Income", minutes = 30 },
 		ClimberLamp = { name = "Climber's Lamp", detail = "2x climb speed for 30 min", icon = "lantern", price = 79, productId = 0, kind = "boost", boost = "Climb", minutes = 30 },
@@ -499,6 +617,148 @@ for _, offer in Config.Shop.Limited.Offers do
 	Config.Shop.Items[offer.id] = offer
 end
 
+-- Speed: the competitive stat, trained on the Hauling Rig. It only sets climb speed
+-- (project owner), with diminishing returns so huge numbers stay climbable:
+--   climb studs/s = BaseClimb + ClimbPerDecade x log10(1 + Speed), up to MaxClimb
+-- 0 -> 16, 1K -> 52, 1M -> 88, 1B -> 124, about 1T and up -> 150. Open: numbers.
+Config.Speed = {
+	BaseClimb = 16,
+	ClimbPerDecade = 12,
+	MaxClimb = 150,
+	MaxWithPerks = 240, -- after the Swift Climber pass and climb boost
+	-- Climb speed also nudges walking and stamina, very slightly, with no cap (project
+	-- owner): the bonus uses climb speed before MaxClimb / MaxWithPerks, so it keeps
+	-- growing with Speed (slowly, on the same log curve) after climbing tops out.
+	--   bonus = rate x (uncapped climb speed - BaseClimb)
+	-- e.g. climb 150: +6.7% move, +10% stamina; 1Qi Speed with the pass: about +16% / +24%.
+	MovePerClimb = 0.0005, -- walk and sprint speed: +0.05% per stud/s of climb speed
+	StaminaPerClimb = 0.00075, -- stamina drains slower and refills faster: +0.075% per stud/s
+}
+
+-- The Hauling Rig on every base (server Hauling, client HaulController). Fully AFK
+-- (project owner): the "Haul rope" prompt locks you in place at the rope, and the rig
+-- pulls by itself until you move or jump. Speed per pull = PullGain x your climb speed
+-- upgrade multiplier. Open: every number.
+Config.Hauling = {
+	PullGain = 1, -- Speed per pull, before the upgrade multiplier
+	PullInterval = 0.5, -- seconds between pulls while locked in
+	Range = 9, -- how close to the rope the prompt works
+	StandOff = 1.25, -- haulers stand this far from the rope (matches Config.Rope.HoldOffset, so hands land on it)
+	HandleHeight = 3.4, -- the handle hangs this far above the floor
+	CrateSteps = 10, -- pulls to hoist the crate to the top before it drops back
+}
+
+-- Pickaxes: the weapons (project owner), one per Hollow layer, sold at the Forge (client
+-- ForgeMenu, server Arsenal). A pickaxe unlocks once you have been down to its layer,
+-- then costs cash (about 1.5x the rope length level that opens the layer). The
+-- equipped one is your tool; swinging it hits anything tagged Tags.Enemy in reach and
+-- in front of you (the server checks every swing). Creatures are later work; each base
+-- has a training dummy to test on.
+--   damage per hit, cooldown seconds between swings, reach studs
+--   look: shaft / head colours and materials, an optional glowing accent, and a style
+--   (vine, wood, stone, crystal, tide, gear, bone, ember, shroom, lumen) for the details
+--   (PickaxeModels)
+-- Open: every name and number.
+local function c3(r: number, g: number, b: number): Color3
+	return Color3.fromRGB(r, g, b)
+end
+Config.Pickaxes = {
+	List = {
+		{ id = "Gardener", name = "Gardener's Pick", layer = 1, cost = 0, damage = 10, cooldown = 0.8, reach = 6,
+			shaft = c3(130, 92, 58), shaftMaterial = Enum.Material.Wood, head = c3(150, 150, 150), headMaterial = Enum.Material.Metal, style = "vine" },
+		{ id = "Rootsplitter", name = "Rootsplitter", layer = 2, cost = 22.5e3, damage = 25, cooldown = 0.75, reach = 6.5,
+			shaft = c3(90, 62, 40), shaftMaterial = Enum.Material.Wood, head = c3(110, 84, 60), headMaterial = Enum.Material.Wood, style = "wood" },
+		{ id = "Cliffbreaker", name = "Cliffbreaker", layer = 3, cost = 7.5e6, damage = 60, cooldown = 0.7, reach = 7,
+			shaft = c3(70, 60, 54), shaftMaterial = Enum.Material.Wood, head = c3(150, 160, 170), headMaterial = Enum.Material.Slate, accent = c3(110, 170, 255), style = "stone" },
+		{ id = "Frostfang", name = "Frostfang", layer = 4, cost = 4.5e9, damage = 150, cooldown = 0.65, reach = 7.5,
+			shaft = c3(200, 220, 235), shaftMaterial = Enum.Material.Marble, head = c3(170, 225, 250), headMaterial = Enum.Material.Ice, accent = c3(140, 230, 255), style = "crystal" },
+		{ id = "Tidecleaver", name = "Tidecleaver", layer = 5, cost = 4.5e12, damage = 400, cooldown = 0.6, reach = 8,
+			shaft = c3(40, 70, 80), shaftMaterial = Enum.Material.Wood, head = c3(70, 140, 130), headMaterial = Enum.Material.CorrodedMetal, accent = c3(200, 240, 255), style = "tide" },
+		{ id = "Gearbreaker", name = "Gearbreaker", layer = 6, cost = 1.5e15, damage = 1000, cooldown = 0.55, reach = 8.5,
+			shaft = c3(70, 50, 34), shaftMaterial = Enum.Material.Wood, head = c3(200, 160, 80), headMaterial = Enum.Material.Metal, accent = c3(255, 190, 90), style = "gear" },
+		{ id = "Marrowpick", name = "Marrowpick", layer = 7, cost = 22.5e15, damage = 2500, cooldown = 0.5, reach = 9,
+			shaft = c3(220, 210, 190), shaftMaterial = Enum.Material.Marble, head = c3(236, 228, 210), headMaterial = Enum.Material.Marble, accent = c3(200, 255, 120), style = "bone" },
+		{ id = "Emberhammer", name = "Emberhammer", layer = 8, cost = 375e15, damage = 6000, cooldown = 0.48, reach = 9.5,
+			shaft = c3(50, 40, 38), shaftMaterial = Enum.Material.Metal, head = c3(70, 55, 50), headMaterial = Enum.Material.Basalt, accent = c3(255, 120, 40), style = "ember" },
+		{ id = "Gloamreaver", name = "Gloamreaver", layer = 9, cost = 7.5e18, damage = 15000, cooldown = 0.46, reach = 10,
+			shaft = c3(70, 55, 95), shaftMaterial = Enum.Material.Wood, head = c3(120, 80, 170), headMaterial = Enum.Material.Glass, accent = c3(170, 255, 225), style = "shroom" },
+		{ id = "Dawnbreaker", name = "Dawnbreaker", layer = 10, cost = 150e18, damage = 37500, cooldown = 0.44, reach = 10.5,
+			shaft = c3(240, 232, 215), shaftMaterial = Enum.Material.Marble, head = c3(255, 245, 220), headMaterial = Enum.Material.Foil, accent = c3(255, 225, 150), style = "lumen" },
+	},
+	HitDelay = 0.2, -- seconds from the swing to the hit (SwingAnimation.STRIKE)
+	-- Hitting other players (project owner): no damage, but they ragdoll and fly back,
+	-- so you can knock rivals away from a relic (or off a ledge). Never in town, never
+	-- someone on a rope, and a short immunity after each knockdown so nobody is stun
+	-- locked. Knockback grows a little with the pickaxe's layer. Open: every number.
+	Pvp = {
+		Enabled = true,
+		Knockback = 55, -- studs/s away from the swinger
+		KnockbackPerLayer = 4,
+		Lift = 30, -- studs/s upward
+		RagdollSeconds = 1.6,
+		ImmuneSeconds = 1.5, -- after getting up
+		SafeZones = { "Town" },
+	},
+	MaxTargets = 3, -- one swing can hit this many things
+	FacingDot = 0.2, -- how far in front a target must be (1 = straight ahead)
+}
+-- The grappling hook (project owner), sold at the Forge (server Grapple, Arsenal). Used
+-- in the Hollow, it hooks the ledge ring just above you and hauls you up onto it, for
+-- when you fall below the end of your rope. One use per BandMeters of depth (0-100 m,
+-- 100-200 m, ...); the bands come back in town or on respawn. Open: every number.
+Config.Grapple = {
+	id = "Grapple",
+	name = "Grappling Hook",
+	cost = 100e3,
+	BandMeters = 100,
+	MinRise = 6, -- the ledge must be at least this many studs above you
+	PullSeconds = 1.4,
+}
+
+Config.PickaxeById = {}
+for _, pickaxe in Config.Pickaxes.List do
+	Config.PickaxeById[pickaxe.id] = pickaxe
+end
+
+-- Creatures of the Hollow (server Enemies, EnemyModels), one kind per layer, styled to
+-- it. They roam their layer's ledges, chase players who come close (never into a
+-- camp's ring, never out to the rope line), and attack in reach. Sprinting outruns them.
+-- A kill pays its reward to whoever hit it last. Health is about six hits of that
+-- layer's pickaxe; reward is about a minute of a Common relic from that layer.
+-- Open: every name and number.
+Config.Enemies = {
+	PerLayer = 3, -- alive at once in each layer
+	RespawnSeconds = 25,
+	AggroRadius = 26, -- notices players this close on its ledge
+	AggroHeight = 10, -- ...within this many studs up or down
+	LeashRadius = 70, -- gives up the chase this far from where it spawned
+	AttackRange = 4.5,
+	SimRadius = 260, -- only creatures this close to a player move
+	TickRate = 15, -- movement updates per second
+	Kinds = {
+		{ id = "Mosshopper", name = "Mosshopper", layer = 1, shape = "hopper", health = 60, damage = 8, attackCooldown = 1.4, speed = 13, scale = 1,
+			body = Color3.fromRGB(96, 150, 70), accent = Color3.fromRGB(190, 230, 120) },
+		{ id = "Barkcrawler", name = "Barkcrawler", layer = 2, shape = "crawler", health = 150, damage = 12, attackCooldown = 1.3, speed = 15, scale = 1.1,
+			body = Color3.fromRGB(96, 70, 48), accent = Color3.fromRGB(230, 70, 50) },
+		{ id = "SprayWraith", name = "Spray Wraith", layer = 3, shape = "wraith", health = 360, damage = 16, attackCooldown = 1.2, speed = 16, scale = 1.2,
+			body = Color3.fromRGB(225, 235, 245), accent = Color3.fromRGB(120, 190, 255) },
+		{ id = "Shardback", name = "Shardback", layer = 4, shape = "beetle", health = 900, damage = 22, attackCooldown = 1.2, speed = 16, scale = 1.3,
+			body = Color3.fromRGB(120, 180, 210), accent = Color3.fromRGB(160, 240, 255) },
+		{ id = "Murkfin", name = "Murkfin", layer = 5, shape = "fin", health = 2400, damage = 28, attackCooldown = 1.1, speed = 17, scale = 1.3,
+			body = Color3.fromRGB(50, 110, 105), accent = Color3.fromRGB(255, 220, 90) },
+		{ id = "Sentinel", name = "Clockwork Sentinel", layer = 6, shape = "golem", health = 6000, damage = 35, attackCooldown = 1.3, speed = 15, scale = 1.4,
+			body = Color3.fromRGB(176, 140, 72), accent = Color3.fromRGB(255, 170, 60) },
+		{ id = "MarrowWyrm", name = "Marrow Wyrm", layer = 7, shape = "wyrm", health = 15000, damage = 45, attackCooldown = 1.0, speed = 18, scale = 1.5,
+			body = Color3.fromRGB(226, 206, 182), accent = Color3.fromRGB(190, 255, 110) },
+		{ id = "Slagcrab", name = "Slagcrab", layer = 8, shape = "crab", health = 36000, damage = 55, attackCooldown = 1.1, speed = 16, scale = 1.5,
+			body = Color3.fromRGB(58, 48, 44), accent = Color3.fromRGB(255, 120, 40) },
+		{ id = "GloamStalker", name = "Gloam Stalker", layer = 9, shape = "stalker", health = 90000, damage = 65, attackCooldown = 1.1, speed = 17, scale = 1.5,
+			body = Color3.fromRGB(110, 75, 150), accent = Color3.fromRGB(150, 255, 220) },
+		{ id = "LumenSeraph", name = "Lumen Seraph", layer = 10, shape = "seraph", health = 225000, damage = 80, attackCooldown = 1.0, speed = 18, scale = 1.6,
+			body = Color3.fromRGB(250, 244, 228), accent = Color3.fromRGB(255, 215, 130) },
+	},
+}
+
 Config.Spawner = {
 	TickSeconds = 4, -- how often each layer may refill one empty node
 	-- Decided: a very rare relic has a very low chance of appearing outside its usual
@@ -512,9 +772,9 @@ Config.Spawner = {
 -- both ledges of layer N. Open: every length, speed, and cost.
 Config.Rope = {
 	-- Costs follow the project owner's curve (Config.Rope.CostCurve): 15K, 250K, 5M,
-	-- 120M, 3B, 75B, 3T, 50T, 1Qa, 15Qa. Eleven levels: each one reaches the next ledge
-	-- down (ledges sit at 56 and 124 studs into every 160-stud layer), and the last
-	-- reaches the floor of layer 7.
+	-- 120M, 3B, 75B, 3T, 50T, 1Qa, 15Qa, continued for layers 8-10 (250Qa, 5Qi,
+	-- 100Qi). Each level reaches the next ledge or layer down (ledges sit at 56 and 124
+	-- studs into every 160-stud layer), and the last reaches the floor of layer 10.
 	LengthLevels = {
 		{ value = 140, cost = 0 }, -- layer 1, both ledges
 		{ value = 230, cost = 15e3 }, -- layer 2, first ledge
@@ -526,21 +786,29 @@ Config.Rope = {
 		{ value = 710, cost = 3e12 }, -- layer 5, first ledge
 		{ value = 780, cost = 50e12 }, -- layer 5, both
 		{ value = 940, cost = 1e15 }, -- layer 6
-		{ value = 1120, cost = 15e15 }, -- layer 7, to the floor
+		{ value = 1120, cost = 15e15 }, -- layer 7, to its floor
+		{ value = 1270, cost = 250e15 }, -- layer 8, both ledges
+		{ value = 1440, cost = 5e18 }, -- layer 9, both ledges
+		{ value = 1597, cost = 100e18 }, -- layer 10, down to the floor (a climber's feet touch it)
 	},
-	-- Climbing speed in studs per second, same cost curve.
+	-- The "Climb speed" upgrade (project owner): it no longer sets climb speed. Each level
+	-- multiplies the Speed you gain per pull on your base's Hauling Rig (Config.Hauling);
+	-- Speed is what sets climb speed (Config.Speed). Same cost curve as rope length.
 	SpeedLevels = {
-		{ value = 16, cost = 0 },
-		{ value = 20, cost = 15e3 },
-		{ value = 25, cost = 250e3 },
-		{ value = 31, cost = 5e6 },
-		{ value = 38, cost = 120e6 },
-		{ value = 46, cost = 3e9 },
-		{ value = 55, cost = 75e9 },
-		{ value = 65, cost = 3e12 },
-		{ value = 76, cost = 50e12 },
-		{ value = 88, cost = 1e15 },
-		{ value = 100, cost = 15e15 },
+		{ value = 1, cost = 0 },
+		{ value = 3, cost = 15e3 },
+		{ value = 10, cost = 250e3 },
+		{ value = 30, cost = 5e6 },
+		{ value = 100, cost = 120e6 },
+		{ value = 300, cost = 3e9 },
+		{ value = 1000, cost = 75e9 },
+		{ value = 3000, cost = 3e12 },
+		{ value = 10e3, cost = 50e12 },
+		{ value = 30e3, cost = 1e15 },
+		{ value = 100e3, cost = 15e15 },
+		{ value = 300e3, cost = 250e15 },
+		{ value = 1e6, cost = 5e18 },
+		{ value = 3e6, cost = 100e18 },
 	},
 	DescendMultiplier = 1.5, -- sliding down is faster than climbing up
 	MountDepth = 3, -- players mount the rope this far below rim height
@@ -555,6 +823,11 @@ Config.Rope = {
 	SpeedSlack = 8, -- server: extra studs allowed per check for latency bursts
 	CheckInterval = 0.1,
 	DeploySeconds = 1.2, -- rope extension animation
+	-- Every rope is deployed when its owner joins (project owner). Anyone may grab
+	-- anyone's rope, but on someone else's rope you can only climb up (UpOnlySlack
+	-- studs of give before the server holds you).
+	AutoDeploy = true,
+	UpOnlySlack = 3,
 	-- Abseil animations (client RopePose). Leave empty to use the built-in ones
 	-- (shared RopeAnimations, registered at runtime, no publishing needed). Optional:
 	-- published ids ("rbxassetid://123...") override them: Hang (still on the rope),
@@ -631,12 +904,24 @@ Config.Tags = {
 	CampZone = "HB_CampZone",
 	HollowRim = "HB_HollowRim", -- one part: position = pit centre at rim height
 	Plot = "HB_Plot", -- Model with attribute PlotIndex; see README for child names
+	Enemy = "HB_Enemy", -- Model with a Humanoid and HumanoidRootPart that pickaxes can hit
 	Spin = "HB_Spin", -- relic models clients slowly spin and bob (attribute HB_Base = rest CFrame)
 }
 
 -- Development-only switches. All of these only take effect inside Roblox Studio.
+-- Admin chat commands for playtests on live servers (server Admin): "/hb help". The
+-- experience owner (or rank 255 in the owning group) is always an admin, as is anyone
+-- in Studio. Add friends' user ids here to let them use the commands too.
+Config.Admin = {
+	UserIds = {} :: { number },
+}
+
 Config.Dev = {
 	BuildPlaceholderMap = true, -- build the rim town and the Hollow at runtime
+	-- Also build it on live Roblox servers (each server builds it on start, about a minute
+	-- for the terrain), so a published place needs no baking. Turn off once the map is
+	-- baked into the place or hand-built.
+	BuildMapOnLiveServers = true,
 	SurfaceLighting = true, -- warm late-afternoon light and haze at the surface (dev map look)
 	RunSelfTest = true, -- run the logic self-test on server start
 	EnableDevRemotes = true, -- create the dev remotes (pickup tests, cash grant)

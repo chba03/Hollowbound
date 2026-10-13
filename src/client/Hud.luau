@@ -106,17 +106,54 @@ function Hud.new(playerGui: PlayerGui)
 	corner(panel, 8)
 	padding(panel, 10)
 	vlist(panel, 6)
-	label(panel, { text = "RELICS", font = Enum.Font.GothamBold, size = 14, order = 0 })
+	-- Header: click to collapse or expand the list.
+	local header = Instance.new("TextButton")
+	header.Name = "Header"
+	header.BackgroundTransparency = 1
+	header.AutoButtonColor = false
+	header.Font = Enum.Font.GothamBold
+	header.TextSize = 14
+	header.TextColor3 = COLORS.text
+	header.TextXAlignment = Enum.TextXAlignment.Left
+	header.Size = UDim2.new(1, 0, 0, 18)
+	header.LayoutOrder = 0
+	header.Parent = panel
+	self.header = header
+	self.relicCount = 0
+	self.collapsed = false
 
-	local list = Instance.new("Frame")
+	-- The list scrolls once it is taller than 55% of the screen.
+	local list = Instance.new("ScrollingFrame")
 	list.Name = "List"
 	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
 	list.Size = UDim2.new(1, 0, 0, 0)
-	list.AutomaticSize = Enum.AutomaticSize.Y
+	list.CanvasSize = UDim2.new()
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.ScrollingDirection = Enum.ScrollingDirection.Y
+	list.ScrollBarThickness = 5
+	list.ScrollBarImageColor3 = COLORS.muted
+	list.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
 	list.LayoutOrder = 1
 	list.Parent = panel
 	vlist(list, 6)
 	self.list = list
+
+	local layout = list:FindFirstChildOfClass("UIListLayout") :: UIListLayout
+	local function fit()
+		local maxHeight = math.max(120, gui.AbsoluteSize.Y * 0.55)
+		list.Size = UDim2.new(1, 0, 0, math.min(layout.AbsoluteContentSize.Y, maxHeight))
+	end
+	layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(fit)
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(fit)
+	fit()
+
+	header.Activated:Connect(function()
+		self.collapsed = not self.collapsed
+		list.Visible = not self.collapsed
+		self:refreshHeader()
+	end)
+	self:refreshHeader()
 
 	-- Base stats (top left, below the Roblox buttons)
 	local stats = Instance.new("Frame")
@@ -132,6 +169,7 @@ function Hud.new(playerGui: PlayerGui)
 	vlist(stats, 4)
 	self.cashLabel = label(stats, { font = Enum.Font.GothamBold, size = 20, color = COLORS.displayed, order = 1 })
 	self.incomeLabel = label(stats, { size = 13, color = COLORS.muted, order = 2 })
+	self.speedLabel = label(stats, { font = Enum.Font.GothamBold, size = 15, color = Color3.fromRGB(120, 220, 255), order = 3 })
 	self.ropeLabel = label(stats, { size = 13, order = 3 })
 	self.slotsLabel = label(stats, { size = 13, order = 4 })
 	self.depthLabel = label(stats, { size = 13, order = 5 })
@@ -265,7 +303,14 @@ function Hud.new(playerGui: PlayerGui)
 	return self
 end
 
+function Hud:refreshHeader()
+	local arrow = if self.collapsed then "\u{25B8}" else "\u{25BE}"
+	self.header.Text = `{arrow}  RELICS ({self.relicCount})`
+end
+
 function Hud:setInventory(items)
+	self.relicCount = #items
+	self:refreshHeader()
 	for _, child in self.list:GetChildren() do
 		if child:IsA("GuiObject") then
 			child:Destroy()
@@ -339,7 +384,8 @@ function Hud:setStats(stats)
 	local slotsUsed = stats.slotsUsed or 0
 	self.cashLabel.Text = Progression.formatCash(stats.cash or 0)
 	self.incomeLabel.Text = `+{Progression.formatCash(stats.income or 0)}/s from displays`
-	self.ropeLabel.Text = `Rope: {stats.ropeLength or 0} studs  ·  {stats.ropeSpeed or 0} studs/s`
+	self.speedLabel.Text = `Speed: {Progression.formatNumber(stats.speed or 0)}`
+	self.ropeLabel.Text = `Rope: {stats.ropeLength or 0} studs  ·  climb {math.floor(stats.ropeSpeed or 0)} studs/s`
 	self.slotsLabel.Text = `Displays: {slotsUsed}/{stats.slots or 0}`
 	local deepest = math.floor((stats.deepest or 0) * Config.Display.MetersPerStud)
 	self.depthLabel.Text = if deepest > 0 then `Deepest: {deepest} m` else "Deepest: surface"
@@ -352,6 +398,55 @@ function Hud:setDepth(depthStuds: number)
 	if self.depthMeter.Text ~= text then
 		self.depthMeter.Text = text
 	end
+end
+
+-- The Hauling Rig hint (its own line, so the rope hint never overwrites it).
+function Hud:setHaulHint(text: string?)
+	if not self.haulLabel then
+		local l = label(self.gui, {
+			text = "",
+			font = Enum.Font.GothamBold,
+			size = 16,
+			color = Color3.fromRGB(120, 220, 255),
+			align = Enum.TextXAlignment.Center,
+			dims = UDim2.new(0, 520, 0, 22),
+		})
+		l.AnchorPoint = Vector2.new(0.5, 1)
+		l.Position = UDim2.new(0.5, 0, 1, -232)
+		l.TextStrokeTransparency = 0.4
+		self.haulLabel = l
+	end
+	self.haulLabel.Text = text or ""
+end
+
+-- A "Stop hauling" button (for touch screens and anyone who prefers clicking).
+function Hud:setHaulStop(visible: boolean, onStop: () -> ())
+	if not self.haulStop then
+		local button = Instance.new("TextButton")
+		button.Name = "StopHauling"
+		button.AnchorPoint = Vector2.new(0.5, 1)
+		button.Position = UDim2.new(0.5, 0, 1, -262)
+		button.Size = UDim2.fromOffset(180, 40)
+		button.BackgroundColor3 = Color3.fromRGB(150, 60, 40)
+		button.TextColor3 = Color3.new(1, 1, 1)
+		button.Font = Enum.Font.GothamBold
+		button.TextSize = 18
+		button.Text = "Stop hauling"
+		button.Visible = false
+		button.Parent = self.gui
+		corner(button, 8)
+		self.haulStop = button
+	end
+	self.haulStopHandler = onStop
+	if not self.haulStopWired then
+		self.haulStopWired = true
+		self.haulStop.Activated:Connect(function()
+			if self.haulStopHandler then
+				self.haulStopHandler()
+			end
+		end)
+	end
+	self.haulStop.Visible = visible
 end
 
 function Hud:setHint(text: string?)

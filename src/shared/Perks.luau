@@ -61,6 +61,11 @@ function Perks.staminaRegen(player: Player): number
 	return multiply(player, "staminaRegen")
 end
 
+-- Speed gained per pull on the Hauling Rig (no perk changes it yet).
+function Perks.speedGain(player: Player): number
+	return multiply(player, "speedGain")
+end
+
 -- Scales the safe and fatal fall heights.
 function Perks.fall(player: Player): number
 	return multiply(player, "fall")

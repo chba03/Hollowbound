@@ -36,7 +36,8 @@ PlayerData.Template = {
 
 	Cash = 0,
 	RopeLengthLevel = 1, -- index into Config.Rope.LengthLevels
-	RopeSpeedLevel = 1, -- index into Config.Rope.SpeedLevels
+	RopeSpeedLevel = 1, -- index into Config.Rope.SpeedLevels (Speed gained per pull)
+	Speed = 0, -- trained on the Hauling Rig; sets climb speed (Progression.climbSpeed)
 	BaseSlotsLevel = 1, -- index into Config.Base.SlotLevels
 
 	-- Owned relics: [specimenId] = {
@@ -55,6 +56,16 @@ PlayerData.Template = {
 		CashEarned = 0,
 	},
 
+	-- Pickaxes (server Arsenal): owned ids and the equipped one. The first is free.
+	Pickaxes = {
+		Owned = { Gardener = true },
+		Equipped = "Gardener",
+	},
+	-- Other gear bought at the Forge (server Arsenal, Grapple).
+	Gear = {
+		Grapple = false,
+	},
+
 	-- Store (server Store). Timed boosts: [boostId] = server time the boost ends.
 	Boosts = {},
 	-- Recent purchase receipt ids, so a retried receipt never grants twice.
@@ -65,6 +76,8 @@ PlayerData.Template = {
 		Bought = {},
 	},
 }
+
+local MAX_STAT = 2 ^ 62 -- leaderboard values are 64-bit integers
 
 local profileStore = ProfileStore.New(Config.Data.StoreName, PlayerData.Template)
 local profiles: { [Player]: any } = {}
@@ -84,16 +97,30 @@ function PlayerData.publish(player: Player)
 	player:SetAttribute("HB_RopeSpeedLevel", data.RopeSpeedLevel)
 	player:SetAttribute("HB_BaseSlotsLevel", data.BaseSlotsLevel)
 	player:SetAttribute("HB_RopeLength", Progression.value("RopeLength", data.RopeLengthLevel))
-	-- Climb speed includes the Swift Climber pass and the climb boost (Perks).
-	player:SetAttribute("HB_RopeSpeed", Progression.value("RopeSpeed", data.RopeSpeedLevel) * Perks.climb(player))
+	PlayerData.publishSpeed(player)
 	player:SetAttribute("HB_Slots", Progression.value("BaseSlots", data.BaseSlotsLevel))
 
 	local leaderstats = player:FindFirstChild("leaderstats")
-	if leaderstats then
-		local cash = leaderstats:FindFirstChild("Cash")
-		if cash then
-			cash.Value = math.floor(data.Cash)
-		end
+	local cash = leaderstats and leaderstats:FindFirstChild("Cash")
+	if cash and cash:IsA("StringValue") then
+		cash.Value = Progression.formatCash(data.Cash) -- past 64-bit range late game, so shown as text
+	end
+end
+
+-- Speed, climb speed, and the Speed leaderboard column. Cheap enough to run on every
+-- pull at the Hauling Rig.
+function PlayerData.publishSpeed(player: Player)
+	local data = PlayerData.get(player)
+	if not data then
+		return
+	end
+	player:SetAttribute("HB_Speed", data.Speed)
+	-- Climb speed comes from Speed, times the Swift Climber pass and climb boost (Perks).
+	player:SetAttribute("HB_RopeSpeed", math.min(Progression.climbSpeed(data.Speed) * Perks.climb(player), Config.Speed.MaxWithPerks))
+	local leaderstats = player:FindFirstChild("leaderstats")
+	local speed = leaderstats and leaderstats:FindFirstChild("Speed")
+	if speed then
+		speed.Value = math.min(math.floor(data.Speed), MAX_STAT)
 	end
 end
 
@@ -148,9 +175,13 @@ local function onPlayerAdded(player: Player)
 
 	profiles[player] = profile
 
+	-- The server leaderboard (Roblox's player list): Speed first, so it sorts by Speed.
 	local leaderstats = Instance.new("Folder")
 	leaderstats.Name = "leaderstats"
-	local cash = Instance.new("IntValue")
+	local speed = Instance.new("IntValue")
+	speed.Name = "Speed"
+	speed.Parent = leaderstats
+	local cash = Instance.new("StringValue")
 	cash.Name = "Cash"
 	cash.Parent = leaderstats
 	leaderstats.Parent = player

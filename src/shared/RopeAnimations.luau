@@ -9,7 +9,7 @@
 	        the legs step up the rope
 
 	build(mode) turns a mode into a real KeyframeSequence (an R15 animation). The client
-	(RopePose) registers these at runtime so they play without being published. To publish
+	(RopePose) sets pose() on the joints directly, so nothing needs publishing. To publish
 	them instead (optional), run this in Studio's command bar in edit mode:
 
 	  require(game.ReplicatedStorage.HollowboundShared.RopeAnimations).export()
@@ -17,7 +17,7 @@
 	then right-click each KeyframeSequence in ServerStorage > HollowboundRopeAnimations,
 	choose "Save to Roblox", and paste the ids into Config.Rope.Animations.
 
-	pose() is also used directly as a fallback for rigs the animations cannot drive.
+	pose() / r6Pose() are what RopePose uses unless published ids are set.
 ]]
 
 local Config = require(script.Parent.Config)
@@ -87,6 +87,7 @@ RopeAnimations.CLIPS = {
 	hang = { length = 2, keys = 2 },
 	down = { length = 1, keys = 12 },
 	up = { length = 1, keys = 12 },
+	haul = { length = 1, keys = 12 }, -- standing at the Hauling Rig
 }
 
 -- Studs of rope one loop covers (two hand strokes). RopePose plays the loop at
@@ -150,10 +151,11 @@ function RopeAnimations.pose(phase: number, mode: string, _amount: number): Pose
 	local t = (phase / (2 * math.pi)) % 1
 	-- Grip heights above the shoulders, per hand. handHeight gives -1..1.
 	local rightUp, leftUp, neck, legSwing
-	if mode == "up" then
+	local haul = mode == "haul"
+	if mode == "up" or haul then
 		rightUp = 1.05 + 0.45 * handHeight(t, true)
 		leftUp = 1.05 + 0.45 * handHeight(t + 0.5, true)
-		neck, legSwing = 12, 20 -- looking up; legs step up the rope
+		neck, legSwing = if haul then 4 else 12, if haul then 0 else 20 -- climbing: legs step up the rope
 	elseif mode == "down" then
 		rightUp = 0.95 + 0.35 * handHeight(t, false)
 		leftUp = 0.95 + 0.35 * handHeight(t + 0.5, false)
@@ -165,7 +167,11 @@ function RopeAnimations.pose(phase: number, mode: string, _amount: number): Pose
 
 	-- The rope's distance in front of the shoulders: the hold offset, plus however far
 	-- the lean carries the shoulders back.
-	local tilt = LEAN + WAIST
+	-- Hauling stands on the ground: the lean comes from the waist, so the legs and feet
+	-- stay planted. On the rope the whole body leans back from the hips.
+	local rootLean = if haul then 0 else LEAN
+	local waistLean = if haul then rad(12) else WAIST
+	local tilt = rootLean + waistLean
 	local forward = Config.Rope.HoldOffset + SHOULDER_UP * math.sin(tilt)
 	local function arm(up: number): (number, number, number)
 		local shoulder, elbow, inward = reach(up, forward)
@@ -180,19 +186,19 @@ function RopeAnimations.pose(phase: number, mode: string, _amount: number): Pose
 	local leftLeg = rightHigh * legSwing
 
 	return {
-		Root = CFrame.Angles(LEAN, 0, 0),
-		Waist = CFrame.Angles(WAIST, 0, 0),
+		Root = CFrame.Angles(rootLean, 0, 0),
+		Waist = CFrame.Angles(waistLean, 0, 0),
 		Neck = CFrame.Angles(rad(neck), 0, 0),
 		RightShoulder = CFrame.Angles(rightShoulder, 0, -rightIn),
 		RightElbow = CFrame.Angles(rightElbow, 0, 0),
 		LeftShoulder = CFrame.Angles(leftShoulder, 0, leftIn),
 		LeftElbow = CFrame.Angles(leftElbow, 0, 0),
-		RightHip = CFrame.Angles(rad(18 + rightLeg), 0, rad(-6)),
-		RightKnee = CFrame.Angles(rad(-(38 + rightLeg)), 0, 0),
-		LeftHip = CFrame.Angles(rad(18 + leftLeg), 0, rad(6)),
-		LeftKnee = CFrame.Angles(rad(-(38 + leftLeg)), 0, 0),
-		RightAnkle = CFrame.Angles(rad(10), 0, 0),
-		LeftAnkle = CFrame.Angles(rad(10), 0, 0),
+		RightHip = if haul then CFrame.Angles(rad(4), 0, 0) else CFrame.Angles(rad(18 + rightLeg), 0, rad(-6)),
+		RightKnee = if haul then CFrame.Angles(rad(-8), 0, 0) else CFrame.Angles(rad(-(38 + rightLeg)), 0, 0),
+		LeftHip = if haul then CFrame.Angles(rad(4), 0, 0) else CFrame.Angles(rad(18 + leftLeg), 0, rad(6)),
+		LeftKnee = if haul then CFrame.Angles(rad(-8), 0, 0) else CFrame.Angles(rad(-(38 + leftLeg)), 0, 0),
+		RightAnkle = CFrame.Angles(rad(if haul then 4 else 10), 0, 0),
+		LeftAnkle = CFrame.Angles(rad(if haul then 4 else 10), 0, 0),
 	}
 end
 
@@ -211,16 +217,38 @@ function RopeAnimations.r6Pose(phase: number, mode: string, _amount: number): Po
 	}
 end
 
-local function addPoses(parent: Instance, node, pose: Pose)
+-- Joints missing from `pose` get weight 0, so other animations (walking, holding a
+-- tool) keep driving them.
+local function addPoses(parent: Instance, node, pose: Pose, easing: Enum.PoseEasingStyle?)
 	local p = Instance.new("Pose")
 	p.Name = node.part
 	p.CFrame = pose[node.joint] or CFrame.identity
-	p.EasingStyle = Enum.PoseEasingStyle.Linear
-	p.Weight = 1
+	p.EasingStyle = easing or Enum.PoseEasingStyle.Linear
+	p.Weight = if pose[node.joint] then 1 else 0
 	p.Parent = parent
 	for _, child in node.children or {} do
-		addPoses(p, child, pose)
+		addPoses(p, child, pose, easing)
 	end
+end
+
+-- A general R15 KeyframeSequence from timed poses: { { time, pose, easing? }, ... }.
+-- Used for other animations built in code (the pickaxe swing).
+function RopeAnimations.sequence(name: string, keys: { any }, loop: boolean, priority: Enum.AnimationPriority): KeyframeSequence
+	local sequence = Instance.new("KeyframeSequence")
+	sequence.Name = name
+	sequence.Loop = loop
+	sequence.Priority = priority
+	for _, key in keys do
+		local keyframe = Instance.new("Keyframe")
+		keyframe.Time = key[1]
+		local root = Instance.new("Pose")
+		root.Name = "HumanoidRootPart"
+		root.Weight = 0
+		root.Parent = keyframe
+		addPoses(root, TREE, key[2], key[3])
+		keyframe.Parent = sequence
+	end
+	return sequence
 end
 
 -- A looping R15 KeyframeSequence for one mode ("hang" | "down" | "up").

@@ -11,6 +11,11 @@
 	relics, and higher tiers are rarer. Decided: a very rare relic has a very low chance of appearing outside
 	its usual depth, so a small LuckyChance rolls from a deeper layer's table instead.
 	The specimen still records the layer it was found in.
+
+	Divine, Eternal, and Godly have no spawn weight: they only come from rare spawns
+	(Config.RareSpawns), rolled every RollSeconds so each tier turns up with its
+	per-day chance (Divine 60%). A rare spawn takes a free spawn point in a random layer
+	that holds the tier (or replaces an ordinary relic there) and is announced.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -60,7 +65,7 @@ function RelicSpawner.rollTable(layer: number, random: Random)
 end
 
 -- Weighted tier roll. With a layer, only tiers that layer holds can come up (layers
--- 1-2 have no Divine or Godly, 3-4 no Godly). Returns a tier id from Config.Rarities.
+-- 1-2 have no Divine, Eternal, or Godly). Returns a tier id from Config.Rarities.
 -- weights (optional) replaces the tiers' spawn weights, e.g. a crate's odds. Without
 -- it, a lit Lucky Lantern (Perks.serverLuckLeft) multiplies the rarer tiers' weights.
 function RelicSpawner.rollRarity(random: Random, layer: number?, weights: { [string]: number }?): string
@@ -72,6 +77,9 @@ function RelicSpawner.rollRarity(random: Random, layer: number?, weights: { [str
 	for _, tier in Config.Rarities do
 		if not byTier or byTier[tier.id] then
 			local w = if weights then (weights[tier.id] or 0) else tier.weight
+			if w <= 0 then
+				continue
+			end
 			if lucky and tier.rank >= luck.minRank then
 				w *= luck.multiplier
 			end
@@ -103,11 +111,15 @@ function RelicSpawner.pickType(layer: number, rarity: string, random: Random): s
 	error(`Layer {layer} has no relic types`)
 end
 
-local function spawnOne(layer: number, point: BasePart)
-	local tableDef, source = RelicSpawner.rollTable(layer, rng)
+-- forcedTier: a rare spawn's tier (from this layer's own table, no lucky roll).
+local function spawnOne(layer: number, point: BasePart, forcedTier: string?)
+	local tableDef, source = Config.Layers[layer], layer
+	if not forcedTier then
+		tableDef, source = RelicSpawner.rollTable(layer, rng)
+	end
 	-- The tier comes from the layer the relic lies in, so a lucky roll brings a deeper
-	-- layer's relic but never a tier that layer may not hold (no Godly above layer 5).
-	local typeId = RelicSpawner.pickType(source, RelicSpawner.rollRarity(rng, layer), rng)
+	-- layer's relic but never a tier that layer may not hold.
+	local typeId = RelicSpawner.pickType(source, forcedTier or RelicSpawner.rollRarity(rng, layer), rng)
 	local specimen =
 		SpecimenFactory.create(typeId, tableDef.quality[1], tableDef.quality[2], rng, makeId, layer)
 	store:add(specimen)
@@ -151,6 +163,47 @@ local function fill(layer: number, maxSpawns: number)
 		active += 1
 		spawned += 1
 	end
+end
+
+-- A rare spawn of `tierId` in a random layer that holds it. Returns the layer, or nil.
+function RelicSpawner.spawnRare(tierId: string): number?
+	local layers = {}
+	for layer = 1, #Config.Layers do
+		local ids = Config.RelicsByLayer[layer] and Config.RelicsByLayer[layer][tierId]
+		if ids and #ids > 0 and #pointsByLayer[layer] > 0 then
+			table.insert(layers, layer)
+		end
+	end
+	if #layers == 0 then
+		return nil
+	end
+	local layer = layers[rng:NextInteger(1, #layers)]
+	local free, taken = {}, {}
+	for _, point in pointsByLayer[layer] do
+		if isOccupied(point) then
+			table.insert(taken, point)
+		elseif point.Parent then
+			table.insert(free, point)
+		end
+	end
+	local point
+	if #free > 0 then
+		point = free[rng:NextInteger(1, #free)]
+	elseif #taken > 0 then
+		point = taken[rng:NextInteger(1, #taken)]
+		WorldRelics.despawn(occupant[point]) -- make room: an ordinary relic gives way
+		occupant[point] = nil
+	else
+		return nil
+	end
+	spawnOne(layer, point, tierId)
+	return layer
+end
+
+-- Chance per roll so a tier appears with `perDay` probability over a day of rolls.
+local function chancePerRoll(perDay: number): number
+	local rolls = 86400 / Config.RareSpawns.RollSeconds
+	return 1 - (1 - math.clamp(perDay, 0, 0.999999)) ^ (1 / rolls)
 end
 
 -- Night: removes every relic still lying in the Hollow and stops refills until
@@ -203,6 +256,21 @@ function RelicSpawner.start(theStore)
 			end
 			for layer = 1, #Config.Layers do
 				fill(layer, 1)
+			end
+		end
+	end)
+	task.spawn(function()
+		while true do
+			task.wait(Config.RareSpawns.RollSeconds)
+			if paused then
+				continue
+			end
+			local luck = if Perks.serverLuckLeft() > 0 then Config.Shop.ServerLuck.multiplier else 1
+			for _, entry in Config.RareSpawns.Tiers do
+				if rng:NextNumber() < chancePerRoll(entry.perDay) * luck then
+					local layer = RelicSpawner.spawnRare(entry.tier)
+					print(`[Hollowbound] Rare spawn: {entry.tier} in layer {layer}`)
+				end
 			end
 		end
 	end)

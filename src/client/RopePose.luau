@@ -2,21 +2,20 @@
 	The rope animation for players on a rope (see shared RopeAnimations for the moves:
 	holding, hand over hand going down, hand over hand going up).
 
-	It plays through Roblox's own Animator, picking the first source that works:
+	Two sources:
 
-	  1. Published ids in Config.Rope.Animations: played on the local character only;
-	     Roblox replicates character animations, so everyone sees them.
-	  2. The built-in RopeAnimations, registered on this client at startup (no publishing
-	     needed). Registered animations only exist on this client, so it plays them on
-	     every nearby climber, and every client does the same: everyone sees everyone.
-	  3. If registering fails, or a rig is R6: the same pose set directly on the joints
-	     each frame.
+	  1. Published ids in Config.Rope.Animations: played through the Animator on the
+	     local character only; Roblox replicates character animations, so everyone sees
+	     them.
+	  2. Otherwise the built-in RopeAnimations pose, set directly on the joints each
+	     frame on every nearby climber (every client does the same: everyone sees
+	     everyone). Animations registered at runtime only play in Studio, so they are
+	     not used: Studio and live servers look the same.
 
 	The mode follows the climber's vertical speed, and the hop and climb loops speed up
 	with it. Presentation only. The Output prints one line saying which source is used.
 ]]
 
-local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -166,20 +165,7 @@ local function prepareAnimations(): string
 		localOnly = true
 		return "published animations from Config.Rope.Animations"
 	end
-	for mode in RopeAnimations.CLIPS do
-		local ok, id = pcall(function()
-			return KeyframeSequenceProvider:RegisterKeyframeSequence(RopeAnimations.build(mode))
-		end)
-		if ok and typeof(id) == "string" and id ~= "" then
-			animationIds[mode] = id
-		else
-			warn(`[Hollowbound] Could not register the {mode} rope animation: {id}`)
-		end
-	end
-	if next(animationIds) then
-		return "built-in animations, registered on this client"
-	end
-	return "built-in pose set on the joints (animations could not be registered)"
+	return "built-in pose set on the joints"
 end
 
 function RopePose.start()
@@ -203,6 +189,7 @@ function RopePose.start()
 				continue
 			end
 			local onRope = player:GetAttribute("HB_OnRope") == true
+				or player:GetAttribute("HB_Hauling") == true -- the Hauling Rig uses the same moves
 			local root = character:FindFirstChild("HumanoidRootPart")
 			local near = root ~= nil and root:IsA("BasePart") and (root.Position - eye).Magnitude <= POSE_DISTANCE
 			local active = onRope and near
@@ -248,6 +235,12 @@ function RopePose.start()
 			climber.smoothedVy += (vy - climber.smoothedVy) * math.min(1, dt * 8)
 			local speed = math.abs(climber.smoothedVy)
 			local mode = if climber.smoothedVy < -2 then "down" elseif climber.smoothedVy > 2 then "up" else "hang"
+			local owner = Players:GetPlayerFromCharacter(character)
+			if owner and owner:GetAttribute("HB_Hauling") == true and owner:GetAttribute("HB_OnRope") ~= true then
+				-- At the Hauling Rig: standing, pulling hand over hand, feet planted.
+				mode = "haul"
+				speed = 16
+			end
 
 			if next(climber.tracks) then
 				driveTracks(climber, mode, speed)

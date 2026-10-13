@@ -71,6 +71,19 @@ local function dawn()
 	print("[Hollowbound] Dawn: the Hollow refilled")
 end
 
+-- Admin commands: skip straight to night or dawn.
+function NightCycle.forceNight()
+	if not night then
+		nightfall()
+	end
+end
+
+function NightCycle.forceDawn()
+	if night then
+		dawn()
+	end
+end
+
 function NightCycle.isNight(): boolean
 	return night
 end

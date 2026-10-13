@@ -13,6 +13,11 @@ return {
 	RopeGrab = "RopeGrab", -- RemoteEvent: client -> server, no arguments
 	RopeRelease = "RopeRelease", -- RemoteEvent: client -> server, (atTop: boolean)
 	Sprint = "Sprint", -- RemoteEvent: client -> server, (wantsToSprint: boolean)
+	ForgeBuy = "ForgeBuy", -- RemoteEvent: client -> server, (pickaxeId)
+	ForgeEquip = "ForgeEquip", -- RemoteEvent: client -> server, (pickaxeId)
+	HitShown = "HitShown", -- RemoteEvent: server -> client, (position, damage) for damage numbers
+	Knockback = "Knockback", -- RemoteEvent: server -> client, (velocity, seconds): you were hit, ragdoll
+	HaulStop = "HaulStop", -- RemoteEvent: client -> server, let go of the Hauling Rig
 	ShopBuy = "ShopBuy", -- RemoteEvent: client -> server, (itemId: string from Config.Shop.Items)
 	BuyUpgrade = "BuyUpgrade", -- RemoteEvent: client -> server, (kind: "RopeLength" | "RopeSpeed" | "BaseSlots")
 

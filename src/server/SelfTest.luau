@@ -195,10 +195,11 @@ function SelfTest.run(): boolean
 	local function has(layer: number, tierId: string): boolean
 		return Config.RelicsByLayer[layer][tierId] ~= nil
 	end
-	check(count == 42 and #Config.RelicOrder == 42, "the catalogue has 42 relic types")
+	check(count == 70 and #Config.RelicOrder == 70, "the catalogue has 70 relic types")
 	check(
-		not has(1, "Divine") and not has(2, "Godly") and not has(4, "Godly") and has(3, "Divine") and has(5, "Godly"),
-		"no Divine or Godly in layers 1-2, no Godly in layers 3-4"
+		not has(1, "Divine") and not has(2, "Godly") and not has(4, "Godly") and has(3, "Divine") and has(5, "Godly")
+			and not has(3, "Eternal") and has(4, "Eternal") and has(10, "Eternal") and has(10, "Godly"),
+		"no Divine or Godly in layers 1-2, no Godly in layers 3-4, Eternal from layer 4 down"
 	)
 	local everyLayerFilled = true
 	for layer = 1, #Config.Layers do
@@ -213,11 +214,19 @@ function SelfTest.run(): boolean
 	local tierRng0 = Random.new(3)
 	for _ = 1, 2000 do
 		local tierId = RelicSpawner.rollRarity(tierRng0, 1)
-		if tierId == "Divine" or tierId == "Godly" then
+		if tierId == "Divine" or tierId == "Eternal" or tierId == "Godly" then
 			onlyAllowed = false
 		end
 	end
-	check(onlyAllowed, "layer 1 never rolls Divine or Godly")
+	check(onlyAllowed, "layer 1 never rolls Divine, Eternal, or Godly")
+	local neverNormal = true
+	for _ = 1, 3000 do
+		local tierId = RelicSpawner.rollRarity(tierRng0, 10)
+		if Config.RarityById[tierId].rank >= 5 then
+			neverNormal = false
+		end
+	end
+	check(neverNormal, "Divine and up never come from normal refills (rare spawns only)")
 	local sizes, minSize, maxSize = Random.new(9), math.huge, 0
 	for _ = 1, 3000 do
 		local size = SpecimenFactory.rollSize(sizes)
@@ -243,6 +252,13 @@ function SelfTest.run(): boolean
 	check((seenTiers.Common or 0) > (seenTiers.Mythic or 0) and (seenTiers.Mythic or 0) > (seenTiers.Godly or 0), "lower tiers spawn more often")
 	check(RelicSpawner.pickType(3, "Divine", tierRng) == "ThunderSpiral", "a layer's tier roll picks that layer's relic")
 	check(Config.Base.PedestalCount >= Config.Base.SlotLevels[#Config.Base.SlotLevels].value, "enough pedestals for max slots")
+
+	-- Speed
+	check(Progression.climbSpeed(0) == Config.Speed.BaseClimb, "no Speed climbs at the base speed")
+	check(Progression.climbSpeed(1e6) > Progression.climbSpeed(1e3), "more Speed climbs faster")
+	check(Progression.climbSpeed(1e30) == Config.Speed.MaxClimb, "climb speed is capped")
+	local multipliers = Config.Rope.SpeedLevels
+	check(multipliers[#multipliers].value > multipliers[1].value, "climb speed upgrades raise Speed per pull")
 
 	-- Pit shape
 	local H = Config.Hollow

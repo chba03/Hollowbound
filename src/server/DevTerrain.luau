@@ -35,6 +35,9 @@ local STYLE = {
 	{ wall = M.Basalt, patches = { M.Slate, M.Rock }, outcrops = { M.Basalt, M.Slate }, ledge = M.Slate, pools = true },
 	{ wall = M.Ground, patches = { M.Mud, M.Rock, M.Ground }, outcrops = { M.Rock, M.Mud }, ledge = M.Ground, paths = M.Cobblestone },
 	{ wall = M.Sandstone, patches = { M.Salt, M.Mud, M.Limestone }, outcrops = { M.Salt, M.Sandstone }, ledge = M.Salt },
+	{ wall = M.Basalt, patches = { M.CrackedLava, M.Basalt, M.Slate }, outcrops = { M.Basalt, M.CrackedLava }, ledge = M.Basalt },
+	{ wall = M.Slate, patches = { M.Mud, M.Rock, M.Ground }, outcrops = { M.Rock, M.Slate }, ledge = M.Mud },
+	{ wall = M.Limestone, patches = { M.Salt, M.Glacier, M.Pavement }, outcrops = { M.Glacier, M.Limestone }, ledge = M.Pavement },
 }
 
 local SLICE = 16 -- carve the pit in slices so its radius can follow the depth profile

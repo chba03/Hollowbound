@@ -5,7 +5,8 @@
 	position. While on the rope, this module moves the local character along the rope
 	line with an AlignPosition so climbing feels immediate, at the HB_RopeSpeed the
 	server published. Keys: W / Up to climb, S / Down to descend, Space to let go.
-	Off the rope, F grabs your own rope when you are close to it.
+	Off the rope, F grabs the nearest rope: your own, or anyone else's (HB_ClimbOwner
+	is then their UserId, and you can only climb up on it).
 ]]
 
 local Players = game:GetService("Players")
@@ -38,14 +39,38 @@ local function character()
 	return nil, nil
 end
 
--- Rope line x/z, top Y, bottom Y from server-published attributes.
-local function ropeSpan(): (Vector3?, number, number)
-	local point = player:GetAttribute("HB_RopePoint")
+-- Whose rope you are climbing: someone else's while HB_ClimbOwner is set, else yours.
+local function ropeOwner(): Player
+	local id = player:GetAttribute("HB_ClimbOwner")
+	local owner = if typeof(id) == "number" then Players:GetPlayerByUserId(id) else nil
+	return owner or player
+end
+
+-- A player's rope line x/z, top Y, bottom Y from their server-published attributes.
+local function spanOf(owner: Player): (Vector3?, number, number)
+	local point = owner:GetAttribute("HB_RopePoint")
 	if typeof(point) ~= "Vector3" then
 		return nil, 0, 0
 	end
-	local length = player:GetAttribute("HB_RopeLength") or 0
+	local length = owner:GetAttribute("HB_RopeLength") or 0
 	return point, point.Y + Config.Rope.TopOffset, point.Y - length
+end
+
+local function ropeSpan(): (Vector3?, number, number)
+	return spanOf(ropeOwner())
+end
+
+-- Is `position` close enough to `owner`'s deployed rope to grab it?
+local function canGrab(owner: Player, position: Vector3): boolean
+	if not owner:GetAttribute("HB_RopeDeployed") then
+		return false
+	end
+	local point, topY, bottomY = spanOf(owner)
+	if not point then
+		return false
+	end
+	local horizontal = Vector2.new(position.X - point.X, position.Z - point.Z).Magnitude
+	return horizontal <= Config.Rope.GrabRadius and position.Y >= bottomY - 2 and position.Y <= topY + 2
 end
 
 local function heldDirection(): number
@@ -84,6 +109,7 @@ local function attach()
 		return
 	end
 	humanoid.PlatformStand = true
+	humanoid:UnequipTools() -- both hands on the rope
 
 	local newGrip = Instance.new("Attachment")
 	newGrip.Name = "HB_RopeGrip"
@@ -129,20 +155,33 @@ end
 -- Hint text for the HUD, or nil.
 local function hint(): string?
 	if player:GetAttribute("HB_OnRope") then
+		local ceiling = player:GetAttribute("HB_AscentCeiling")
+		local root = character()
+		local point = ropeSpan()
+		if typeof(ceiling) == "number" and root and point then
+			local left = math.max(0, (point.Y - ceiling) - root.Position.Y) -- studs below the ceiling
+			if left < 2 then
+				return "The rare relic weighs you down: rest at a camp to climb higher."
+			end
+			return string.format("W / S: climb   Space: let go   (%d m of climbing before you must rest)", math.floor(left * Config.Display.MetersPerStud))
+		end
+		local owner = ropeOwner()
+		if owner ~= player then
+			return `W: climb   Space: let go   ({owner.DisplayName}'s rope: up only)`
+		end
 		return "W / S: climb   Space: let go"
 	end
-	if not player:GetAttribute("HB_RopeDeployed") then
-		return nil
-	end
 	local root = character()
-	local point, topY, bottomY = ropeSpan()
-	if not root or not point then
+	if not root then
 		return nil
 	end
-	local position = root.Position
-	local horizontal = Vector2.new(position.X - point.X, position.Z - point.Z).Magnitude
-	if horizontal <= Config.Rope.GrabRadius and position.Y >= bottomY - 2 and position.Y <= topY + 2 then
+	if canGrab(player, root.Position) then
 		return "F: grab your rope"
+	end
+	for _, other in Players:GetPlayers() do
+		if other ~= player and canGrab(other, root.Position) then
+			return `F: grab {other.DisplayName}'s rope (climb up only)`
+		end
 	end
 	return nil
 end
@@ -189,6 +228,9 @@ function RopeController.start(remotes: Instance, hud)
 		end
 		local root = character()
 		local direction = heldDirection()
+		if ropeOwner() ~= player then
+			direction = math.max(direction, 0) -- someone else's rope: up only
+		end
 		local speed = player:GetAttribute("HB_RopeSpeed") or 16
 		local rate = if direction < 0 then speed * Config.Rope.DescendMultiplier else speed
 		-- If the server moved us (snap-back or harness catch), climb on from there
@@ -196,7 +238,10 @@ function RopeController.start(remotes: Instance, hud)
 		if root and math.abs(root.Position.Y - targetY) > 10 then
 			targetY = root.Position.Y
 		end
-		targetY = math.clamp(targetY + direction * rate * dt, bottomY, topY)
+		-- Climbing fatigue: no higher than the ascent ceiling until you rest (server Ascent).
+		local ceiling = player:GetAttribute("HB_AscentCeiling")
+		local maxY = if typeof(ceiling) == "number" then math.max(bottomY, math.min(topY, point.Y - ceiling)) else topY
+		targetY = math.clamp(targetY + direction * rate * dt, bottomY, maxY)
 		align.MaxVelocity = speed * Config.Rope.DescendMultiplier * 1.2
 		-- Hang just off the rope (toward the pit centre) so it runs in front of the chest.
 		align.Position = Vector3.new(point.X, targetY, point.Z) - holdOutward * Config.Rope.HoldOffset

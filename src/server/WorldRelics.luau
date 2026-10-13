@@ -13,6 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
 local Progression = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Progression"))
 local Characters = require(script.Parent.Characters)
+local Hollow = require(script.Parent.Hollow)
 local Ground = require(script.Parent.Ground)
 local RelicModels = require(script.Parent.RelicModels)
 local ServerNet = require(script.Parent.ServerNet)
@@ -131,6 +132,19 @@ function WorldRelics.tryPickup(player: Player, specimenId: any, source: string):
 	)
 	ServerNet.pushInventory(player)
 	print(`[Hollowbound] {player.Name} picked up {specimenId} via {source}`)
+
+	-- Divine and Godly finds: tell everyone who has it and where. RelicMarks marks them red.
+	local tier = Config.RarityById[specimen.rarity]
+	if tier and tier.rank >= Config.RelicMark.MarkRank then
+		local depth = Hollow.measure(root.Position)
+		local layer = Progression.layerForDepth(math.max(depth or 0, 0))
+		local layerName = if Config.Layers[layer] then Config.Layers[layer].name else "the Hollow"
+		ServerNet.announceAll(
+			`{string.upper(specimen.rarity)} RELIC TAKEN`,
+			`{player.DisplayName} has the {name} on layer {layer} ({layerName}). They glow red until it's registered!`,
+			specimen.rarity
+		)
+	end
 	return true
 end
 

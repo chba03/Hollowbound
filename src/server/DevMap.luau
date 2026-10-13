@@ -19,8 +19,9 @@
 	this once in Studio's command bar in edit mode, then save:
 	  require(game.ServerScriptService.HollowboundServer.DevMap).ensure()
 
-	The map sits high above the Baseplate template (rim at Y = 1300). Plots move players
-	up on spawn.
+	The map sits high above the Baseplate template (rim at Y = 2000), so the whole Hollow,
+	down to the floor of layer 10 (Y = 400), stays clear of the Baseplate at Y = 0 and of
+	Workspace.FallenPartsDestroyHeight. Plots move players up on spawn.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -41,7 +42,7 @@ local H = Config.Hollow
 local DevMap = {}
 
 local MAP_NAME = "HollowboundDevMap"
-local CENTER = Vector3.new(0, 1300, 0)
+local CENTER = Vector3.new(0, 2000, 0)
 local RIM_Y = CENTER.Y
 local BOARD_Y = 6.5 -- centre height of the upgrade boards above the plot floor
 local MARKER_RADIUS = H.LedgeInnerRadius + 7 -- relic orbs sit near the ledge edge, easy to spot from the rope
@@ -200,12 +201,72 @@ local function buildPlot(map: Model, index: number)
 	arm.CanCollide = false
 	part(plot, "RopeAnchor", Vector3.new(1.2, 1.2, 1.2), at(0, 11.5, -reach), Color3.fromRGB(90, 70, 55), Enum.Material.CorrodedMetal)
 
-	-- Registry desk: a timber booth with a glowing ledger screen and a small roof.
-	local terminal = part(plot, "Terminal", Vector3.new(4, 7, 2), at(-18, 4.5, -12), Color3.fromRGB(110, 78, 50), Enum.Material.WoodPlanks)
-	part(plot, "TerminalScreen", Vector3.new(3, 2, 0.2), at(-18, 6, -13.1), Color3.fromRGB(120, 255, 230), Enum.Material.Neon)
-	part(plot, "TerminalRoof", Vector3.new(5.5, 0.5, 3.6), at(-18, 8.3, -12.6) * CFrame.Angles(-0.25, 0, 0), Color3.fromRGB(64, 130, 128), Enum.Material.Slate)
+	-- Registry desk: a timber booth against the pit fence, its glowing ledger screen and
+	-- small roof facing into the base.
+	local terminal = part(plot, "Terminal", Vector3.new(4, 7, 2), at(-18, 4.5, -23.2), Color3.fromRGB(110, 78, 50), Enum.Material.WoodPlanks)
+	part(plot, "TerminalScreen", Vector3.new(3, 2, 0.2), at(-18, 6, -22.1), Color3.fromRGB(120, 255, 230), Enum.Material.Neon)
+	part(plot, "TerminalRoof", Vector3.new(5.5, 0.5, 3.6), at(-18, 8.3, -22.6) * CFrame.Angles(0.25, 0, 0), Color3.fromRGB(64, 130, 128), Enum.Material.Slate)
 	CollectionService:AddTag(terminal, Tags.RegistrationTerminal)
 	billboard(terminal, "Registry Terminal", 6, 180)
+
+	-- Training dummy: a straw target on a post, for trying pickaxes (Tags.Enemy, Dummy).
+	do
+		local dummy = Instance.new("Model")
+		dummy.Name = "TrainingDummy"
+		local straw, post = Color3.fromRGB(214, 186, 120), Color3.fromRGB(100, 72, 46)
+		local root = part(dummy, "HumanoidRootPart", Vector3.new(2, 2.4, 1.2), at(13, 4.2, -19), straw, Enum.Material.Fabric)
+		part(dummy, "Head", Vector3.new(1.4, 1.4, 1.4), at(13, 6.2, -19), straw, Enum.Material.Fabric).Shape = Enum.PartType.Ball
+		part(dummy, "Post", Vector3.new(0.4, 3.2, 0.4), at(13, 2.6, -19), post, Enum.Material.Wood)
+		part(dummy, "Arms", Vector3.new(4, 0.4, 0.4), at(13, 4.9, -19), post, Enum.Material.Wood)
+		part(dummy, "Target", Vector3.new(0.1, 1.1, 1.1), at(13, 4.3, -18.38) * CFrame.Angles(0, math.pi / 2, 0), Color3.fromRGB(180, 50, 40), Enum.Material.SmoothPlastic).Shape = Enum.PartType.Cylinder
+		local humanoid = Instance.new("Humanoid")
+		humanoid.MaxHealth = 1e6
+		humanoid.Health = 1e6
+		humanoid.DisplayName = "Training Dummy"
+		humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+		humanoid.Parent = dummy
+		dummy.PrimaryPart = root
+		dummy:SetAttribute("Dummy", true)
+		CollectionService:AddTag(dummy, Tags.Enemy)
+		dummy.Parent = plot
+	end
+
+	-- Hauling Rig: a timber frame with a pulley. The rope's free end (HaulHandle) hangs on
+	-- the near side, where you stand and pull; the crate (HaulCrate) hangs on the far side
+	-- and rises with each pull (client HaulController animates it).
+	local rigX, rigZ = -17, -5
+	local wood, dark = Color3.fromRGB(120, 86, 56), Color3.fromRGB(86, 60, 40)
+	for _, dx in { -2.3, 2.3 } do
+		part(plot, "HaulPost", Vector3.new(0.8, 9.5, 0.8), at(rigX + dx, 5.75, rigZ), wood, Enum.Material.Wood)
+		part(plot, "HaulBrace", Vector3.new(0.5, 0.5, 4), at(rigX + dx, 1.4, rigZ), dark, Enum.Material.Wood)
+	end
+	part(plot, "HaulBeam", Vector3.new(5.4, 0.8, 0.8), at(rigX, 10.6, rigZ), wood, Enum.Material.Wood)
+	local pulley = part(plot, "HaulPulley", Vector3.new(0.5, 2.2, 2.2), at(rigX, 9.6, rigZ), Color3.fromRGB(130, 80, 50), Enum.Material.CorrodedMetal)
+	pulley.Shape = Enum.PartType.Cylinder
+	pulley.CanCollide = false
+	local handle = part(plot, "HaulHandle", Vector3.new(1.8, 0.35, 0.35), at(rigX, 4.4, rigZ - 1.1), dark, Enum.Material.Wood)
+	handle.CanCollide = false
+	local crate = part(plot, "HaulCrate", Vector3.new(2.2, 2.2, 2.2), at(rigX, 2.1, rigZ + 1.1), Color3.fromRGB(160, 120, 80), Enum.Material.WoodPlanks)
+	crate.CanCollide = false
+	crate:SetAttribute("RestY", crate.Position.Y)
+	-- Ropes as beams, so they follow the crate when it moves.
+	for _, ends in { { handle, Vector3.new(0, 0.2, 0), Vector3.new(0, 0, -1.1) }, { crate, Vector3.new(0, 1.1, 0), Vector3.new(0, 0, 1.1) } } do
+		local low = Instance.new("Attachment")
+		low.Position = ends[2]
+		low.Parent = ends[1]
+		local high = Instance.new("Attachment")
+		high.Position = ends[3]
+		high.Parent = pulley
+		local rope = Instance.new("Beam")
+		rope.Attachment0 = high
+		rope.Attachment1 = low
+		rope.Width0, rope.Width1 = 0.25, 0.25
+		rope.Color = ColorSequence.new(Color3.fromRGB(196, 160, 106))
+		rope.FaceCamera = true
+		rope.Segments = 1
+		rope.Parent = pulley
+	end
+	billboard(pulley, "Hauling Rig", 3, 160)
 
 	local boards = {
 		{ name = "UpgradeRopeLength", label = "Rope length", z = -16, color = Color3.fromRGB(200, 150, 80) },

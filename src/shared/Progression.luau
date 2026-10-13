@@ -11,7 +11,7 @@ local Progression = {}
 -- Upgrade kinds and the level tables they read from.
 Progression.Upgrades = {
 	RopeLength = { levels = Config.Rope.LengthLevels, field = "RopeLengthLevel", label = "Rope length", unit = " studs" },
-	RopeSpeed = { levels = Config.Rope.SpeedLevels, field = "RopeSpeedLevel", label = "Climb speed", unit = " studs/s" },
+	RopeSpeed = { levels = Config.Rope.SpeedLevels, field = "RopeSpeedLevel", label = "Climb speed", unit = "x per pull" },
 	BaseSlots = { levels = Config.Base.SlotLevels, field = "BaseSlotsLevel", label = "Display slots", unit = "" },
 }
 
@@ -30,7 +30,7 @@ function Progression.next(kind: string, level: number)
 	return levels[nextLevel], nextLevel
 end
 
--- Layer index for a depth in studs below rim height: 0 at or above the rim, then 1..7.
+-- Layer index for a depth in studs below rim height: 0 at or above the rim, then 1..10.
 function Progression.layerForDepth(depth: number): number
 	if depth <= 0 then
 		return 0
@@ -94,7 +94,21 @@ function Progression.relicName(typeId: string, size: number?): string
 	return if label == "" then name else `{label} {name}`
 end
 
-local SUFFIXES = { "", "K", "M", "B", "T", "Qa", "Qi", "Sx" }
+-- Climb speed in studs/s for a Speed stat (Config.Speed): diminishing returns, capped.
+function Progression.climbSpeed(speed: number): number
+	local s = Config.Speed
+	return math.min(s.MaxClimb, s.BaseClimb + s.ClimbPerDecade * math.log10(1 + math.max(speed, 0)))
+end
+
+-- Climb speed above BaseClimb with no cap (studs/s): Speed's log curve times the climb
+-- perk multiplier. Drives the small walk and stamina bonuses in Config.Speed.
+function Progression.uncappedClimbGain(speed: number, perkMultiplier: number): number
+	local s = Config.Speed
+	local climb = (s.BaseClimb + s.ClimbPerDecade * math.log10(1 + math.max(speed, 0))) * perkMultiplier
+	return math.max(0, climb - s.BaseClimb)
+end
+
+local SUFFIXES = { "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc" }
 
 function Progression.formatCash(amount: number): string
 	amount = math.floor(amount)
@@ -108,6 +122,11 @@ function Progression.formatCash(amount: number): string
 		return "$" .. tostring(amount)
 	end
 	return string.format("$%.1f%s", scaled, SUFFIXES[index])
+end
+
+-- A big number without the $, e.g. 1.2M.
+function Progression.formatNumber(amount: number): string
+	return string.sub(Progression.formatCash(amount), 2)
 end
 
 return Progression

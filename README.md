@@ -14,9 +14,10 @@ Core rules and the current milestone: [`CLAUDE.md`](CLAUDE.md).
 Tests (mock, two-client Studio, and real persistence): [`docs/TESTING.md`](docs/TESTING.md).
 Third-party code: [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md).
 
-Branch: `feature/pve-expedition`, created from `feature/relic-systems` with milestone 3
-still uncommitted in the working tree (`feature/relic-recovery` line). It does not
-include the separate `milestone-2` branch line.
+Repository: <https://github.com/chba03/Hollowbound> (solo project). `main` holds the
+owner-verified integrated version; milestone 5 is in progress on `feature/vertical-world`
+(milestones 3 and 4 are committed beneath it). The separate `milestone-2` branch is not part
+of this project (see CLAUDE.md, "Ownership and repository workflow").
 
 ---
 

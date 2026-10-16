@@ -1,5 +1,5 @@
 --[[
-	Provisional configuration (milestones 1-4).
+	Provisional configuration (milestones 1-5).
 
 	Design status labels follow docs/Hollowbound_Game_Design_v0_2.pdf:
 	  Decided   - explicit design choice
@@ -279,6 +279,7 @@ Config.Creatures = {
 	Variants = {
 		Regular = {
 			displayName = "Thornback",
+			look = "Wildlife", -- milestone 5 dressing; cosmetic only
 			scale = 1,
 			color = Color3.fromRGB(95, 110, 80),
 			health = 60,
@@ -298,7 +299,8 @@ Config.Creatures = {
 			respawnSeconds = 90,
 		},
 		Guardian = {
-			displayName = "Thornback Matriarch",
+			displayName = "Rootwarden",
+			look = "Construct", -- milestone 5: an ancient overgrown construct; cosmetic only
 			scale = 1.6,
 			color = Color3.fromRGB(120, 70, 60),
 			health = 180,
@@ -348,6 +350,143 @@ Config.Supply = {
 	HoldDuration = 0.5,
 }
 
+--[[
+	Milestone 5: the vertical world. Geometry lives in src/server/World/Layout.luau
+	(authored, deterministic); these are the shared, tunable numbers. Every value is a
+	prototype choice (Open) unless a line says otherwise.
+
+	Mode: "Vertical" uses the installed Workspace.HollowboundWorld (see README, "World
+	installation"). "Legacy" uses the milestone 1-4 runtime dev map and fixtures.
+	Services only bind to markers of the active mode, so nothing appears twice.
+]]
+Config.World = {
+	Mode = "Vertical",
+	-- In Studio, if the vertical world is not installed yet, fall back to the legacy dev map
+	-- (loudly) so playtests still work. Live servers never build the legacy map.
+	LegacyFallbackInStudio = true,
+	ModelName = "HollowboundWorld",
+	AuthoredFolderName = "AuthoredDecor", -- never touched by the installer
+	LayoutVersion = "m5-1",
+
+	-- Rim center at the walkable rim surface. Far from the old dev map (X=200) and the
+	-- Baseplate template (|X|, |Z| <= 1024, Y <= 0).
+	Origin = { X = 0, Y = 600, Z = 4000 },
+
+	OpeningRadius = 210, -- the shaft opening at the rim (about 420 studs across)
+	TownOuterRadius = 345, -- the paved rim ring ends here; hills continue to BoundaryRadius
+	BoundaryRadius = 560, -- outer ridge that keeps players in the world
+	FloorDepth = 380, -- first depth's floor, studs below the rim surface
+	LowerDarkDepth = 520, -- background "further descent" scenery ends here (not playable)
+	KillDepth = 560, -- below the rim; anything lower is lost to the dark (void defeat)
+
+	MetersPerStud = 0.3, -- depth readout only (a character is about 5.5 studs tall)
+	-- Region names by depth when no named place applies (studs below the rim).
+	DepthBands = {
+		{ from = -math.huge, name = "Rim Town" },
+		{ from = 2, name = "Upper Shaft" },
+		{ from = 110, name = "Hanging Gardens" },
+		{ from = 300, name = "Verdant Floor" },
+		{ from = 400, name = "The Lower Dark" },
+	},
+
+	-- Starting palette (prototype, from the milestone 5 brief: forest greens, pale stone,
+	-- cool shaded water, warm sunlight, restrained relic accents; town wood, weathered
+	-- stone, workshops). RGB 0-255. Swap freely; the installer reads it on each install.
+	Palette = {
+		PaleStone = { 214, 206, 188 },
+		WeatheredStone = { 168, 160, 146 },
+		MossStone = { 122, 138, 104 },
+		DarkStone = { 70, 72, 74 },
+		AbyssStone = { 34, 38, 44 },
+		Cobble = { 150, 142, 128 },
+		RootWood = { 96, 72, 52 },
+		Timber = { 138, 100, 66 },
+		WeatheredWood = { 156, 132, 104 },
+		RoofClay = { 128, 70, 52 },
+		RoofSlate = { 84, 92, 104 },
+		Leaf = { 78, 132, 72 },
+		LeafLight = { 120, 168, 86 },
+		DeepLeaf = { 46, 92, 60 },
+		Moss = { 96, 128, 70 },
+		Vine = { 70, 120, 64 },
+		Grass = { 104, 140, 78 },
+		Water = { 120, 170, 196 },
+		Mist = { 210, 228, 230 },
+		RelicAccent = { 120, 220, 255 },
+		WarmLight = { 255, 196, 128 },
+		CrystalGlow = { 140, 230, 210 },
+		Cloth = { 170, 140, 100 },
+	},
+
+	-- Lighting preset applied by the installer. The previous Lighting properties and any
+	-- existing Atmosphere are saved in Lighting.HollowboundLightingBackup and restored
+	-- by Installer.restoreLighting(). Other effects are left alone. Lighting.Technology
+	-- is not set (set it in Studio; README recommends ShadowMap or Future).
+	ApplyLightingPreset = true,
+	LightingPreset = "VerdantRim",
+	LightingPresets = {
+		VerdantRim = {
+			Lighting = {
+				ClockTime = 14.2,
+				GeographicLatitude = 28,
+				Brightness = 2.4,
+				Ambient = { 88, 92, 96 },
+				OutdoorAmbient = { 128, 128, 120 },
+				ColorShift_Top = { 255, 236, 205 },
+				ColorShift_Bottom = { 60, 80, 70 },
+				EnvironmentDiffuseScale = 0.6,
+				EnvironmentSpecularScale = 0.4,
+				ExposureCompensation = 0.1,
+				GlobalShadows = true,
+			},
+			Atmosphere = { Density = 0.33, Offset = 0.2, Color = { 199, 214, 210 }, Decay = { 110, 125, 108 }, Glare = 0.25, Haze = 1.4 },
+			Bloom = { Intensity = 0.4, Size = 24, Threshold = 1.6 },
+			ColorCorrection = { Brightness = 0.02, Contrast = 0.08, Saturation = 0.06, TintColor = { 255, 250, 240 } },
+			SunRays = { Intensity = 0.06, Spread = 0.8 },
+			-- Client-side, local only: denser and cooler air toward the floor.
+			DepthBlend = { Density = 0.45, Color = { 170, 200, 196 }, TintColor = { 228, 242, 238 } },
+		},
+	},
+}
+
+-- Camera: adjustable third person (player-controlled zoom), sensible occlusion.
+Config.Camera = {
+	MinZoom = 0.5,
+	MaxZoom = 140, -- generous, so overlooks and next landings are visible
+	FieldOfView = 72,
+}
+
+-- Environmental fall damage (milestone 5, provisional): without it, jumping into the
+-- abyss would be a free descent. It goes through Vitals, so a lethal fall downs you.
+-- Falls are environmental: protected zones do not cancel them.
+Config.Falls = {
+	Enabled = true,
+	SafeSpeed = 85, -- impact speed (studs/s) with no damage (about an 18-stud drop)
+	LethalSpeed = 170, -- impact speed that deals MaxDamage (about a 74-stud drop)
+	MaxDamage = 100,
+}
+
+-- Interaction reach for terminals, stations, pickups, and the town desk: distance,
+-- height difference, and a clear line, so nothing works from below or through floors.
+Config.Reach = {
+	MaxHeightDifference = 6,
+}
+
+-- Explorer gear (cosmetic, welded, massless, non-colliding; hitboxes unchanged).
+Config.Outfit = {
+	Enabled = true,
+	LanternDepth = 120, -- the hip lantern lights below this depth (studs)
+	-- Optional body proportions toward the slender explorer look. Off by default: scaling
+	-- changes hitboxes and reach, which this milestone must not change silently.
+	SlenderProportions = false,
+}
+
+-- Server-timed poses (Motor6D offsets) for actions that have no animation clip yet.
+Config.Poses = {
+	Enabled = true,
+	BlendSeconds = 0.15,
+}
+
 Config.Zones = {
 	CheckInterval = 0.25, -- seconds between server position checks
 }
@@ -362,6 +501,8 @@ Config.Tags = {
 	SupplyStation = "HB_SupplyStation", -- must stand inside a town zone
 	TownZone = "HB_TownZone",
 	CampZone = "HB_CampZone",
+	TownSpawn = "HB_TownSpawn", -- milestone 5: the SpawnLocation players use in the active world
+	Region = "HB_Region", -- milestone 5: named place (attributes RegionName, Radius, Height, Priority)
 	CreatureSpawn = "HB_CreatureSpawn", -- attributes: Variant, EncounterId (guardians)
 	RelicCache = "HB_RelicCache", -- attribute: EncounterId
 	Creature = "HB_Creature", -- set by the server on spawned creatures
@@ -370,6 +511,8 @@ Config.Tags = {
 
 -- Development-only switches. All of these only take effect inside Roblox Studio.
 Config.Dev = {
+	-- The legacy runtime builders below apply only in Config.World.Mode = "Legacy" (or the
+	-- Studio fallback when the vertical world is not installed).
 	BuildPlaceholderMap = true, -- build town, camp, and expedition placeholders at runtime
 	BuildServiceStation = true, -- add a service station next to the registration terminal if none is tagged
 	BuildRelicFixtures = true, -- add pedestals C-E for the milestone 3 test specimens

@@ -5,11 +5,33 @@ Original Roblox exploration and extraction game. Luau + Rojo. Design source:
 Proposed, and Open. Keep those distinctions in code comments and docs. Never treat a
 Proposed example or Open value as settled.
 
-Branch line: `feature/relic-recovery` (milestones 1-2) -> `feature/relic-systems`
-(milestone 3, uncommitted when milestone 4 began) -> `feature/pve-expedition`
-(milestone 4). The separate `milestone-2` branch line (rim town, store, creatures) is
-intentionally not included; the owner chose to ignore it for now. Do not merge it in
-unasked. Never commit, push, merge, or publish without being asked.
+## Ownership and repository workflow
+- Hollowbound is the owner's **solo-developed** game (Carlos Abreu). Every milestone extends
+  one continuing project in this repository: `https://github.com/chba03/Hollowbound`
+  (owner `chba03`, verified 2026-10-16 via GitHub's API: the account GitHub links to the
+  owner's commits).
+- **Excluded work:** the brother's separate line, branch `milestone-2` (commits `1c01b75`
+  and `698956d`, rim town, store, ropes, creatures, terrain), is not part of this project.
+  Never merge, cherry-pick, or copy from it, and never delete or rewrite his branches.
+  Decide by checking history and content, not by branch names or authors alone.
+  (Audit 2026-10-16: not an ancestor of the owner's line; the only identical files are the
+  upstream ProfileStore and its license, fetched independently from MadStudioRoblox.)
+- **Commit and push are authorized** for verified project work: normal commits on the
+  current feature branch, pushed to `origin` for that branch only. Never force-push, mirror
+  all branches, or push other people's branches. Label incomplete work honestly (WIP).
+  After pushing, confirm with `git ls-remote origin refs/heads/<branch>` that the remote
+  commit matches local `HEAD`.
+- Keep credentials, caches, build output, and backup archives out of the repository (it
+  is public). Backups live in `C:/Users/carlo/HollowboundBackups/`.
+- **Branches:** `main` holds the owner-verified integrated version. Each milestone is
+  built on a feature branch that starts from the latest integrated version, and is merged
+  into `main` only after the owner confirms its Studio tests pass. Line so far:
+  `0aaf004` milestone 1 (main) -> `25043f2` milestone 2 -> milestone 3 -> milestone 4 ->
+  `feature/vertical-world` (milestone 5, work in progress, not yet owner-tested).
+- **Authoritative documents:** `docs/Hollowbound_Game_Design_v0_2.pdf` and the owner's
+  milestone briefs. The older concept v0.1 PDF is not authoritative and must not override
+  newer decisions. No art guide or reference image is in the repository yet: ask for it,
+  and label any palette or visual choices made without it as provisional.
 
 ## Core rules (preserve these)
 - Picking up an item establishes ownership. Crews do not pool loot. (Decided)
@@ -95,11 +117,15 @@ unasked. Never commit, push, merge, or publish without being asked.
 - `src/shared`: `Config` (all provisional numbers), `Net` (remote names), `LoadoutRules`.
 - Geometry is found through CollectionService tags (`Config.Tags`), including the
   milestone 4 markers `HB_CreatureSpawn` (Variant, EncounterId) and `HB_RelicCache`
-  (EncounterId); placement rules are in README section 4. Dev geometry (map, service and
-  supply stations, relic fixtures C-E, encounter arena) is Studio-only, built at runtime
-  as separate models, and must never edit other Workspace content. Do not touch terrain,
-  lighting, models, world generation, or add a Rojo Workspace mapping (the owner's
-  brother works on visual style).
+  (EncounterId); placement rules are in README section 4. Legacy dev geometry (map,
+  service and supply stations, relic fixtures C-E, encounter arena) is Studio-only and
+  built at runtime as separate models. Never clear Workspace, erase global Terrain,
+  overwrite unrelated models, or map all of Workspace through Rojo.
+- **Source control vs the Studio place:** Git tracks code, `Config`, and the world
+  definition (`src/server/World/`: Layout, Planner, Installer). The installed world model
+  in Workspace, any hand-made art under `HollowboundWorld.AuthoredDecor`, Lighting edits,
+  and place settings live only in the saved Studio place: save the place (and export
+  models you care about) separately. A Git commit never saves Studio-built content.
 - Put provisional values in `Config`, not inline. Dev helpers stay Studio-only.
 
 ## Milestones
@@ -109,10 +135,12 @@ town service, dev key L.
 3 (done): saved registered relics (ProfileStore), appraisal and activation, 3-slot
 loadout, Windhook and Echo Lens with charges and cooldowns, cross-platform HUD, mock
 test suites (`src/server/Tests`).
-4 (current): expedition lifecycle, Vitals damage interface, downed/revive/self-rescue,
-starter melee, Thornback creature and Matriarch guardian with a locked relic cache,
-ordinary supplies and supply crates, camp protection, field HUD, Survival and Creature
-test suites.
+4 (done, owner-playtested): expedition lifecycle, Vitals damage interface,
+downed/revive/self-rescue, starter melee, Thornback creature and guardian with a locked
+relic cache, ordinary supplies and supply crates, camp protection, field HUD, Survival and
+Creature test suites.
+5 (in progress on `feature/vertical-world`, not owner-tested): vertical world (rim town
+around the abyss, first depth), edit-mode world installer, art and animation pass.
 Not yet: ranks/XP, food and ascent strain, ranged combat, crews, PvP, trading, currency,
 procedural depths, full reconnect (bodies, camp pause/resume), saving ordinary items.
 

@@ -146,9 +146,16 @@ local serverScriptService = newNode("ServerScriptService", nil, root)
 rawget(replicatedStorage, "_children").HollowboundShared = buildDir("HollowboundShared", "src/shared", replicatedStorage)
 rawget(serverScriptService, "_children").HollowboundServer = buildDir("HollowboundServer", "src/server", serverScriptService)
 
+-- Inert stand-ins so modules that read these services can load; tests never rely on them.
+local noSignal = { Connect = function() return { Disconnect = function() end } end }
 local services = {
 	ReplicatedStorage = replicatedStorage,
 	ServerScriptService = serverScriptService,
+	CollectionService = {
+		GetTagged = function() return {} end,
+		GetInstanceAddedSignal = function() return noSignal end,
+	},
+	Players = { GetPlayers = function() return {} end, PlayerAdded = noSignal, PlayerRemoving = noSignal },
 }
 local gameShim = setmetatable({}, {
 	__index = function(_, key)

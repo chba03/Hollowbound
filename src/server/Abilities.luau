@@ -21,6 +21,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
 local AbilityRules = require(script.Parent.AbilityRules)
 local Characters = require(script.Parent.Characters)
+local Poses = require(script.Parent.Poses)
 local Busy = require(script.Parent.Busy)
 local Guard = require(script.Parent.Guard)
 local RelicDefs = require(script.Parent.RelicDefs)
@@ -123,6 +124,7 @@ local function windhook(player: Player, root: BasePart, specimen, params)
 	end)
 
 	ServerNet.abilityFx(player, { kind = "Windhook", duration = params.duration })
+	Poses.pulse(player, "Windhook", params.duration + 0.2)
 	return "Gust leap!"
 end
 
@@ -143,6 +145,7 @@ local function echoLens(player: Player, root: BasePart, specimen, params)
 			ServerNet.abilityFx(player, { kind = "EchoLensEnd" })
 		end
 	end)
+	Poses.pulse(player, "EchoLens", 0.6)
 	task.delay(params.markDuration, function()
 		endEffect(userId, specimen.id, true)
 	end)

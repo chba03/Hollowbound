@@ -27,6 +27,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
 local Creatures = require(script.Parent.Creatures)
+local Markers = require(script.Parent.Markers)
 local EncounterCore = require(script.Parent.EncounterCore)
 local RelicStore = require(script.Parent.RelicStore)
 local ServerNet = require(script.Parent.ServerNet)
@@ -155,7 +156,7 @@ local function addEncounter(marker: BasePart)
 		return
 	end
 	local cache
-	for _, candidate in CollectionService:GetTagged(Config.Tags.RelicCache) do
+	for _, candidate in Markers.tagged(Config.Tags.RelicCache) do
 		if candidate:IsA("BasePart") and candidate:GetAttribute("EncounterId") == id then
 			cache = candidate
 		end
@@ -208,7 +209,7 @@ end
 function Encounters.start(theStore)
 	store = theStore
 
-	for _, marker in CollectionService:GetTagged(Config.Tags.CreatureSpawn) do
+	for _, marker in Markers.tagged(Config.Tags.CreatureSpawn) do
 		if not marker:IsA("BasePart") then
 			continue
 		end

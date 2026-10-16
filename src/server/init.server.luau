@@ -1,5 +1,8 @@
 --[[
-	Hollowbound server entry point (milestone 4).
+	Hollowbound server entry point (milestone 5).
+	Milestone 5: WorldInfo picks the active world first (the installed vertical world, or
+	the legacy runtime dev map); every service then binds only to that world's markers.
+	The vertical world is installed in edit mode (World/Installer) and never built here.
 	The server owns specimen generation, inventories, ownership, registration, final
 	death, service, appraisal, activation, loadouts, abilities, and saved profiles, plus
 	(milestone 4) expeditions, health and the downed stage, melee combat, creatures,
@@ -16,6 +19,11 @@ local Shared = ReplicatedStorage:WaitForChild("HollowboundShared")
 local Config = require(Shared:WaitForChild("Config"))
 local LoadoutRules = require(Shared:WaitForChild("LoadoutRules"))
 local Abilities = require(script.Abilities)
+local Falls = require(script.Falls)
+local Outfitter = require(script.Outfitter)
+local Poses = require(script.Poses)
+local Spawning = require(script.Spawning)
+local WorldInfo = require(script.WorldInfo)
 local Busy = require(script.Busy)
 local Combat = require(script.Combat)
 local Creatures = require(script.Creatures)
@@ -52,21 +60,27 @@ if inStudio and Config.Dev.RunSelfTest then
 end
 
 -- Build the dev map before WorldRelics so the relic spawn parts exist.
-if inStudio and Config.Dev.BuildPlaceholderMap then
+-- Pick the active world before anything binds to markers.
+local worldMode = WorldInfo.resolve()
+local legacy = worldMode == "Legacy"
+
+-- Legacy dev map and fixtures: only when the legacy world is active (Studio only).
+if inStudio and legacy and Config.Dev.BuildPlaceholderMap then
 	DevMap.ensure()
 end
-if inStudio and Config.Dev.BuildServiceStation then
+if inStudio and legacy and Config.Dev.BuildServiceStation then
 	DevMap.ensureServiceStation()
 end
-if inStudio and Config.Dev.BuildRelicFixtures then
+if inStudio and legacy and Config.Dev.BuildRelicFixtures then
 	DevMap.ensureRelicFixtures()
 end
-if inStudio and Config.Dev.BuildSupplyStation then
+if inStudio and legacy and Config.Dev.BuildSupplyStation then
 	DevMap.ensureSupplyStation()
 end
-if inStudio and Config.Dev.BuildEncounterFixtures then
+if inStudio and legacy and Config.Dev.BuildEncounterFixtures then
 	DevMap.ensureEncounterFixtures()
 end
+Spawning.start(worldMode)
 
 local store = RelicStore.new()
 local backend = ProfileBackend.new({
@@ -131,6 +145,11 @@ Creatures.start()
 Combat.start()
 Encounters.start(store)
 FieldActions.start()
+
+-- Milestone 5.
+Falls.start()
+Poses.start()
+Outfitter.start()
 
 -- Going down ends relic effects that need a standing user.
 Vitals.onDowned(function(player)
@@ -214,4 +233,4 @@ Players.PlayerRemoving:Connect(function(player)
 	sessions:depart(player.UserId)
 end)
 
-print(`[Hollowbound] Milestone 4 server ready (storage: {backend.kind}, resolving in background).`)
+print(`[Hollowbound] Milestone 5 server ready (world: {worldMode}, storage: {backend.kind}, resolving in background).`)

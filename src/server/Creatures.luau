@@ -32,6 +32,7 @@ local Characters = require(script.Parent.Characters)
 local CreatureBrain = require(script.Parent.CreatureBrain)
 local ServerNet = require(script.Parent.ServerNet)
 local Vitals = require(script.Parent.Vitals)
+local WorldInfo = require(script.Parent.WorldInfo)
 local Zones = require(script.Parent.Zones)
 
 local Creatures = {}
@@ -120,21 +121,40 @@ local function buildModel(cfg, position: Vector3)
 		weldTo(root, p)
 		return p
 	end
-	local body = part("Body", Vector3.new(3, 1.6, 4), CFrame.new(0, 0, 0), cfg.color, Enum.Material.Slate)
-	part("Head", Vector3.new(1.6, 1.3, 1.6), CFrame.new(0, 0.3 * s, -2.4 * s), cfg.color, Enum.Material.Slate)
-	local eyes = {
-		part("EyeL", Vector3.new(0.3, 0.3, 0.2), CFrame.new(-0.4 * s, 0.5 * s, -3.2 * s), Color3.fromRGB(255, 220, 90), Enum.Material.Neon),
-		part("EyeR", Vector3.new(0.3, 0.3, 0.2), CFrame.new(0.4 * s, 0.5 * s, -3.2 * s), Color3.fromRGB(255, 220, 90), Enum.Material.Neon),
-	}
-	for i = -1, 1 do
-		part(
-			"Thorn",
-			Vector3.new(0.4, 1.2, 1),
-			CFrame.new(0, 1.2 * s, i * 1.1 * s),
-			Color3.fromRGB(60, 45, 35),
-			Enum.Material.Wood,
-			"Wedge"
-		)
+	-- Milestone 5 dressing (cosmetic only; the root, collision, and AI are unchanged).
+	-- "Wildlife": an appealing but dangerous beast. "Construct": an ancient overgrown
+	-- stone guardian. Body and eyes keep their names: the telegraph recolors them.
+	local body, eyes
+	local eyeColor = Color3.fromRGB(255, 220, 90)
+	if cfg.look == "Construct" then
+		local stone = Color3.fromRGB(150, 146, 134)
+		local moss = Color3.fromRGB(96, 128, 70)
+		body = part("Body", Vector3.new(3.2, 1.8, 4), CFrame.new(0, 0, 0), cfg.color, Enum.Material.Slate)
+		part("Plate", Vector3.new(3.6, 0.5, 3.2), CFrame.new(0, 1.1 * s, 0.2 * s), stone, Enum.Material.Slate)
+		part("Head", Vector3.new(1.8, 1.4, 1.6), CFrame.new(0, 0.5 * s, -2.5 * s), stone, Enum.Material.Slate)
+		for side = -1, 1, 2 do
+			part("Pauldron", Vector3.new(1, 1.2, 1.6), CFrame.new(side * 1.9 * s, 0.6 * s, -1.2 * s), stone, Enum.Material.Slate)
+			part("Rune", Vector3.new(0.1, 0.9, 2.6), CFrame.new(side * 1.62 * s, 0, 0), Color3.fromRGB(120, 220, 255), Enum.Material.Neon)
+		end
+		part("Moss", Vector3.new(2.4, 0.3, 2), CFrame.new(0.3 * s, 1.45 * s, 0.8 * s), moss, Enum.Material.Grass)
+		part("Root", Vector3.new(0.4, 0.4, 2.6), CFrame.new(-0.9 * s, 1.4 * s, 0.6 * s) * CFrame.Angles(0, math.rad(25), 0), Color3.fromRGB(96, 72, 52), Enum.Material.Wood)
+		eyes = { part("Eye", Vector3.new(0.6, 0.35, 0.2), CFrame.new(0, 0.6 * s, -3.32 * s), Color3.fromRGB(120, 220, 255), Enum.Material.Neon) }
+	else
+		local fur = cfg.color
+		body = part("Body", Vector3.new(3, 1.7, 4), CFrame.new(0, 0, 0), fur, Enum.Material.Fabric)
+		part("Head", Vector3.new(1.9, 1.9, 1.9), CFrame.new(0, 0.4 * s, -2.4 * s), fur, Enum.Material.Fabric, "Ball")
+		part("Snout", Vector3.new(0.9, 0.6, 0.8), CFrame.new(0, 0.1 * s, -3.3 * s), Color3.fromRGB(70, 60, 50), Enum.Material.SmoothPlastic)
+		for side = -1, 1, 2 do
+			part("Ear", Vector3.new(0.3, 0.9, 0.6), CFrame.new(side * 0.7 * s, 1.3 * s, -2.3 * s) * CFrame.Angles(0, 0, math.rad(-side * 20)), fur, Enum.Material.Fabric, "Wedge")
+		end
+		part("Tail", Vector3.new(0.5, 0.5, 2.2), CFrame.new(0, 0.4 * s, 2.8 * s) * CFrame.Angles(math.rad(25), 0, 0), fur, Enum.Material.Fabric)
+		for i = -1, 1 do
+			part("Thorn", Vector3.new(0.4, 1.2, 1), CFrame.new(0, 1.2 * s, i * 1.1 * s), Color3.fromRGB(60, 45, 35), Enum.Material.Wood, "Wedge")
+		end
+		eyes = {
+			part("EyeL", Vector3.new(0.4, 0.4, 0.2), CFrame.new(-0.45 * s, 0.6 * s, -3.3 * s), eyeColor, Enum.Material.Neon),
+			part("EyeR", Vector3.new(0.4, 0.4, 0.2), CFrame.new(0.45 * s, 0.6 * s, -3.3 * s), eyeColor, Enum.Material.Neon),
+		}
 	end
 
 	local humanoid = Instance.new("Humanoid")
@@ -207,7 +227,7 @@ local function setTelegraph(c, on: boolean)
 	local color = if on then TELEGRAPH_COLOR else c.cfg.color
 	TweenService:Create(c.visual.body, TweenInfo.new(0.15), { Color = color }):Play()
 	for _, eye in c.visual.eyes do
-		eye.Color = if on then TELEGRAPH_COLOR else Color3.fromRGB(255, 220, 90)
+		eye.Color = if on then TELEGRAPH_COLOR elseif c.cfg.look == "Construct" then Color3.fromRGB(120, 220, 255) else Color3.fromRGB(255, 220, 90)
 	end
 end
 
@@ -272,6 +292,9 @@ function Creatures.spawn(variant: string, position: Vector3, options)
 	model:SetAttribute("CreatureId", nextId)
 	model:SetAttribute("Variant", variant)
 	model:AddTag(Config.Tags.Creature)
+	pcall(function()
+		model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic -- streams in and out whole
+	end)
 	model.Parent = folder
 	root:SetNetworkOwner(nil)
 
@@ -586,7 +609,7 @@ local function step(c, now: number, params: RaycastParams)
 	if not c.alive then
 		return
 	end
-	if c.root.Position.Y < workspace.FallenPartsDestroyHeight + 20 then
+	if c.root.Position.Y < workspace.FallenPartsDestroyHeight + 20 or WorldInfo.belowKillPlane(c.root.Position) then
 		lose(c, "fell out of the world")
 		return
 	end

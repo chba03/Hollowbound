@@ -23,6 +23,8 @@ local Busy = require(script.Parent.Busy)
 local Characters = require(script.Parent.Characters)
 local GearStore = require(script.Parent.GearStore)
 local Guard = require(script.Parent.Guard)
+local Markers = require(script.Parent.Markers)
+local Reach = require(script.Parent.Reach)
 local ServerNet = require(script.Parent.ServerNet)
 local Vitals = require(script.Parent.Vitals)
 local Zones = require(script.Parent.Zones)
@@ -141,8 +143,9 @@ function Gear.tryRefill(player: Player, station: BasePart)
 		ServerNet.notify(player, "Supplies are only handed out in town.", "error")
 		return
 	end
-	if (root.Position - station.Position).Magnitude > Config.Supply.ServerMaxDistance then
-		ServerNet.notify(player, "Move closer to the supply station.", "error")
+	local reachable, why = Reach.check(root, station, Config.Supply.ServerMaxDistance)
+	if not reachable then
+		ServerNet.notify(player, if why == "Far" then "Move closer to the supply station." else Reach.message(why), "error")
 		return
 	end
 	local added = store:refill(player.UserId)
@@ -250,8 +253,9 @@ function Gear.tryPickupLoot(player: Player, dropId: string)
 		ServerNet.notify(player, "Those supplies are gone.", "error")
 		return
 	end
-	if (root.Position - part.Position).Magnitude > Config.Loot.ServerMaxDistance then
-		ServerNet.notify(player, "Too far away to pick that up.", "error")
+	local reachable, why = Reach.check(root, part, Config.Loot.ServerMaxDistance)
+	if not reachable then
+		ServerNet.notify(player, if why == "Far" then "Too far away to pick that up." else Reach.message(why), "error")
 		return
 	end
 	local taken, emptiedOrReason = store:claimDrop(dropId, player.UserId)
@@ -358,10 +362,10 @@ function Gear.start()
 	lootFolder.Name = "HollowboundWorldLoot"
 	lootFolder.Parent = workspace
 
-	for _, station in CollectionService:GetTagged(Config.Tags.SupplyStation) do
+	for _, station in Markers.tagged(Config.Tags.SupplyStation) do
 		attachStation(station)
 	end
-	CollectionService:GetInstanceAddedSignal(Config.Tags.SupplyStation):Connect(attachStation)
+	Markers.onAdded(Config.Tags.SupplyStation, attachStation)
 
 	local function watchPlayer(player: Player)
 		player.CharacterAdded:Connect(function()

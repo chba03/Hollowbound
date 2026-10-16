@@ -12,6 +12,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
 local Characters = require(script.Parent.Characters)
 local Guard = require(script.Parent.Guard)
+local Markers = require(script.Parent.Markers)
+local Reach = require(script.Parent.Reach)
 local RelicStore = require(script.Parent.RelicStore)
 local ServerNet = require(script.Parent.ServerNet)
 
@@ -38,8 +40,9 @@ function Registration.tryRegister(player: Player, terminal: BasePart)
 	if not root then
 		return
 	end
-	if (root.Position - terminal.Position).Magnitude > Config.Registration.ServerMaxDistance then
-		ServerNet.notify(player, "Move closer to the terminal.", "error")
+	local reachable, why = Reach.check(root, terminal, Config.Registration.ServerMaxDistance)
+	if not reachable then
+		ServerNet.notify(player, if why == "Far" then "Move closer to the terminal." else Reach.message(why), "error")
 		return
 	end
 
@@ -108,10 +111,10 @@ end
 function Registration.start(theStore, theSessions)
 	store = theStore
 	sessions = theSessions
-	for _, terminal in CollectionService:GetTagged(Config.Tags.RegistrationTerminal) do
+	for _, terminal in Markers.tagged(Config.Tags.RegistrationTerminal) do
 		attach(terminal)
 	end
-	CollectionService:GetInstanceAddedSignal(Config.Tags.RegistrationTerminal):Connect(attach)
+	Markers.onAdded(Config.Tags.RegistrationTerminal, attach)
 end
 
 return Registration

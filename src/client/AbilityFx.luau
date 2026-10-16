@@ -69,8 +69,9 @@ local function mark(part: BasePart, text: string)
 	highlight.OutlineColor = Color3.new(1, 1, 1)
 	highlight.FillTransparency = 0.4
 	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-	highlight.Adornee = part
-	highlight.Parent = part
+	local holder = if part.Parent and part.Parent:IsA("Model") then part.Parent else part
+	highlight.Adornee = holder
+	highlight.Parent = holder
 	table.insert(marks, highlight)
 
 	local billboard = Instance.new("BillboardGui")

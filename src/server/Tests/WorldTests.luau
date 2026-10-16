@@ -15,6 +15,9 @@ local Layout = require(Server.World.Layout)
 local Planner = require(Server.World.Planner)
 local Validate = require(Server.World.Validate)
 local TestKit = require(script.Parent.TestKit)
+local FallMath = require(Server.FallMath)
+local Markers = require(Server.Markers)
+local Reach = require(Server.Reach)
 
 local function countTagged(root: Instance, tag: string): number
 	local n = 0
@@ -158,6 +161,30 @@ return function()
 		check(math.abs(lighting.ClockTime - 9) < 1e-3 and lighting:FindFirstChild("MyAtmosphere") ~= nil, "restore brings back the original lighting and Atmosphere")
 		check(lighting:FindFirstChild("HB_Atmosphere") == nil and lighting:FindFirstChild("HollowboundLightingBackup") == nil, "restore removes the preset effects and the backup")
 	end
+
+	-- Fixture selection: legacy and vertical markers never both count.
+	local legacyMarker = Instance.new("Part")
+	legacyMarker.Parent = unrelated
+	local worldMarker = root:FindFirstChild("Markers")
+	local worldSpawn = worldMarker and worldMarker:FindFirstChild("TownSpawn")
+	check(worldSpawn ~= nil, "the installed world has its town spawn marker")
+	check(Markers.inScopeFor(worldSpawn, "Vertical", root) and not Markers.inScopeFor(legacyMarker, "Vertical", root), "vertical mode binds only markers inside the installed world")
+	check(Markers.inScopeFor(legacyMarker, "Legacy", root) and not Markers.inScopeFor(worldSpawn, "Legacy", root), "legacy mode ignores the installed world's markers")
+	check(not Markers.inScopeFor(worldSpawn, "Vertical", nil), "vertical mode without an installed world binds nothing")
+
+	-- Reach: distance, same level, and (in Studio) a clear line.
+	local maxHeight = Config.Reach.MaxHeightDifference
+	check(Reach.withinReach({ X = 0, Y = 3, Z = 0 }, { X = 5, Y = 4, Z = 0 }, 14, maxHeight) == true, "beside a terminal is within reach")
+	check(select(2, Reach.withinReach({ X = 0, Y = -9, Z = 0 }, { X = 1, Y = 3.5, Z = 0 }, 14, maxHeight)) == "Level", "directly below a terminal (another floor) is refused")
+	check(select(2, Reach.withinReach({ X = 0, Y = 0, Z = 0 }, { X = 30, Y = 0, Z = 0 }, 14, maxHeight)) == "Far", "too far is refused")
+
+	-- Falls: ordinary jumps and steps are free; long drops hurt; huge drops down you.
+	check(FallMath.damageFor(FallMath.speedAfter(7.2), Config.Falls) == 0, "a normal jump deals no fall damage")
+	check(FallMath.damageFor(FallMath.speedAfter(15), Config.Falls) == 0, "a 15-stud drop is safe")
+	local mid = FallMath.damageFor(FallMath.speedAfter(40), Config.Falls)
+	check(mid > 0 and mid < Config.Health.Max, "a 40-stud drop hurts without downing")
+	check(FallMath.damageFor(FallMath.speedAfter(world.FloorDepth), Config.Falls) >= Config.Health.Max, "jumping into the abyss from the rim downs you on the floor")
+	check(FallMath.damageFor(0 / 0, Config.Falls) == 0, "a non-finite speed deals nothing")
 
 	local removed = Installer.uninstallFrom(fakeWorkspace, world)
 	check(removed == first.groups and authored.Parent == root and decorationPart.Parent == authored, "uninstall removes generated groups only")

@@ -22,6 +22,7 @@ local TweenService = game:GetService("TweenService")
 local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
 local Busy = require(script.Parent.Busy)
 local Characters = require(script.Parent.Characters)
+local Poses = require(script.Parent.Poses)
 local Creatures = require(script.Parent.Creatures)
 local Gear = require(script.Parent.Gear)
 local Guard = require(script.Parent.Guard)
@@ -134,6 +135,7 @@ function Combat.requestAttack(player: Player): (boolean, string)
 	swing.swingId += 1
 	local swingId, charId = swing.swingId, Vitals.charId(player) :: number
 	swingVisual(player, weapon.windup)
+	Poses.swing(player, weapon.windup)
 	task.delay(weapon.windup, resolve, player, charId, swingId, weaponId)
 	return true, ""
 end

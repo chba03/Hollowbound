@@ -134,7 +134,10 @@ function Vitals.damagePlayer(player: Player, amount: any, source): (string, stri
 	if not root then
 		return "Refused", "NoCharacter"
 	end
-	if Zones.isProtected(root.Position) then
+	-- Town and camps protect against combat and creature damage. Falls are environmental
+	-- (milestone 5) and still apply there.
+	local environmental = source ~= nil and source.kind == "Fall"
+	if Zones.isProtected(root.Position) and not environmental then
 		return "Refused", "Protected"
 	end
 	local result, reason = VitalsCore.damage(record.core, amount, os.clock(), DOWN_CFG)

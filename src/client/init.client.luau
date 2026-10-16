@@ -15,6 +15,7 @@ local Actions = require(script.Actions)
 local DevKeys = require(script.DevKeys)
 local FieldHud = require(script.FieldHud)
 local Hud = require(script.Hud)
+local WorldFx = require(script.WorldFx)
 
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild(Net.FolderName)
@@ -116,3 +117,4 @@ if typeof(initial) == "table" then
 end
 
 DevKeys.start(remotes, hud)
+WorldFx.start()

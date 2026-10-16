@@ -17,6 +17,8 @@ local Config = require(Shared:WaitForChild("Config"))
 local Net = require(Shared:WaitForChild("Net"))
 local Characters = require(script.Parent.Characters)
 local Guard = require(script.Parent.Guard)
+local Markers = require(script.Parent.Markers)
+local Reach = require(script.Parent.Reach)
 local RelicStore = require(script.Parent.RelicStore)
 local ServerNet = require(script.Parent.ServerNet)
 local SpecimenFactory = require(script.Parent.SpecimenFactory)
@@ -48,19 +50,87 @@ local function rarityColor(rarityId: string): Color3
 	return Color3.new(1, 1, 1)
 end
 
+--[[
+	Milestone 5 relic forms (proxies built from engraved stone parts; see docs/ASSETS.md).
+	Each world relic is a Model named Relic_<id> whose "Core" part carries the tag,
+	SpecimenId, and pickup prompt. Decorative pieces never collide or block raycasts.
+	Pieces named HB_Float are animated locally by each client (RelicIdle). A restrained
+	glow uses the rarity color; nothing shows traits.
+]]
+local STONE = Color3.fromRGB(196, 190, 176)
+local DARK_STONE = Color3.fromRGB(120, 116, 108)
+
+local function decorPiece(model: Model, name: string, size: Vector3, cframe: CFrame, color: Color3, material: Enum.Material, shape: Enum.PartType?)
+	local p = Instance.new("Part")
+	p.Name = name
+	p.Size = size
+	if shape then
+		p.Shape = shape
+	end
+	p.Color = color
+	p.Material = material
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = false
+	p.CFrame = cframe
+	p.Parent = model
+	return p
+end
+
+local function buildForm(model: Model, base: CFrame, core: BasePart, typeId: string, accent: Color3, glow: number)
+	if typeId == "Windhook" then
+		-- A curled stone hook with an engraved channel and a floating ring.
+		decorPiece(model, "Shank", Vector3.new(0.45, 1.6, 0.45), base * CFrame.new(0, 0.3, 0), STONE, Enum.Material.Slate)
+		decorPiece(model, "Curl", Vector3.new(0.4, 0.9, 0.4), base * CFrame.new(0.35, 1.15, 0) * CFrame.Angles(0, 0, math.rad(-50)), STONE, Enum.Material.Slate)
+		decorPiece(model, "Tip", Vector3.new(0.35, 0.6, 0.35), base * CFrame.new(0.75, 1.0, 0) * CFrame.Angles(0, 0, math.rad(-130)), DARK_STONE, Enum.Material.Slate)
+		decorPiece(model, "Engraving", Vector3.new(0.08, 1.3, 0.47), base * CFrame.new(0, 0.3, 0), accent, Enum.Material.Neon).Transparency = 0.35
+		local ring = decorPiece(model, "HB_Float", Vector3.new(0.12, 1.5, 1.5), base * CFrame.new(0, 2.1, 0) * CFrame.Angles(0, 0, math.rad(90)), DARK_STONE, Enum.Material.Slate, Enum.PartType.Cylinder)
+		ring:SetAttribute("FloatSpin", 40)
+	else
+		-- An upright stone disc with a lens and three floating shards.
+		decorPiece(model, "Disc", Vector3.new(0.35, 1.6, 1.6), base * CFrame.new(0, 0.6, 0) * CFrame.Angles(0, math.rad(90), 0), STONE, Enum.Material.Slate, Enum.PartType.Cylinder)
+		local lens = decorPiece(model, "Lens", Vector3.new(0.7, 0.7, 0.7), base * CFrame.new(0, 0.6, 0), accent, Enum.Material.Glass, Enum.PartType.Ball)
+		lens.Transparency = 0.25
+		for i = 0, 2 do
+			local shard = decorPiece(model, "HB_Float", Vector3.new(0.18, 0.45, 0.12), base * CFrame.new(math.cos(i * 2.09) * 1.2, 0.8, math.sin(i * 2.09) * 1.2), DARK_STONE, Enum.Material.Slate)
+			shard:SetAttribute("FloatOrbit", 1.2)
+			shard:SetAttribute("FloatPhase", i * 2.09)
+		end
+	end
+	local light = Instance.new("PointLight")
+	light.Color = accent
+	light.Brightness = glow
+	light.Range = 7
+	light.Shadows = false
+	light.Parent = core
+end
+
+local GLOW = { Common = 0.25, Uncommon = 0.35, Rare = 0.5, Exceptional = 0.75 }
+
 local function spawnWorldPart(specimen, position: Vector3, dropped: boolean)
 	local relicType = Config.RelicTypes[specimen.typeId]
 
+	local model = Instance.new("Model")
+	model.Name = "Relic_" .. specimen.id
 	local part = Instance.new("Part")
-	part.Name = "Relic_" .. specimen.id
-	part.Shape = Enum.PartType.Ball
-	part.Size = Vector3.new(1.6, 1.6, 1.6)
-	part.Material = Enum.Material.Neon
-	part.Color = rarityColor(specimen.rarity)
+	part.Name = "Core"
+	part.Shape = Enum.PartType.Cylinder
+	part.Size = Vector3.new(0.4, 1.4, 1.4)
+	part.Material = Enum.Material.Slate
+	part.Color = DARK_STONE
 	part.Anchored = true
 	part.CanCollide = false
-	part.Position = position
+	part.CFrame = CFrame.new(position - Vector3.new(0, 0.9, 0)) * CFrame.Angles(0, 0, math.rad(90))
 	part:SetAttribute("SpecimenId", specimen.id)
+	part.Parent = model
+	-- Build upright around the core's position (the core itself lies on its side).
+	buildForm(model, CFrame.new(position - Vector3.new(0, 0.9, 0)), part, specimen.typeId, rarityColor(specimen.rarity), GLOW[specimen.rarity] or 0.3)
+	model.PrimaryPart = part
+	pcall(function()
+		model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic -- the prompt and its form stream together
+	end)
 
 	-- The prompt only shows type and rarity, which are visible before appraisal.
 	local prompt = Instance.new("ProximityPrompt")
@@ -75,7 +145,7 @@ local function spawnWorldPart(specimen, position: Vector3, dropped: boolean)
 	end)
 
 	CollectionService:AddTag(part, Config.Tags.WorldRelic)
-	part.Parent = folder
+	model.Parent = folder
 	partsById[specimen.id] = part
 end
 
@@ -106,14 +176,18 @@ function WorldRelics.tryPickup(player: Player, specimenId: any, source: string):
 		return false
 	end
 
-	local distance = (root.Position - part.Position).Magnitude
-	if distance > Config.Pickup.ServerMaxDistance then
+	-- Distance, same level, and a clear line (milestone 5: never through floors).
+	local reachable, why = Reach.check(root, part, Config.Pickup.ServerMaxDistance, { part.Parent :: Instance })
+	if not reachable then
+		local distance = (root.Position - part.Position).Magnitude
 		ServerNet.notify(
 			player,
-			string.format("Too far away to pick that up (%.0f studs, limit %d).", distance, Config.Pickup.ServerMaxDistance),
+			if why == "Far"
+				then string.format("Too far away to pick that up (%.0f studs, limit %d).", distance, Config.Pickup.ServerMaxDistance)
+				else Reach.message(why),
 			"error"
 		)
-		print(string.format("[Hollowbound] Rejected pickup by %s (%s): distance %.1f", player.Name, source, distance))
+		print(string.format("[Hollowbound] Rejected pickup by %s (%s): %s, distance %.1f", player.Name, source, why or "?", distance))
 		return false
 	end
 
@@ -125,7 +199,12 @@ function WorldRelics.tryPickup(player: Player, specimenId: any, source: string):
 	end
 
 	partsById[specimenId] = nil
-	part:Destroy()
+	local holder = part.Parent
+	if holder and holder:IsA("Model") and holder.Name == "Relic_" .. specimenId then
+		holder:Destroy()
+	else
+		part:Destroy()
+	end
 
 	local specimen = store:get(specimenId)
 	local name = Config.RelicTypes[specimen.typeId].displayName
@@ -208,7 +287,7 @@ function WorldRelics.start(theStore)
 	folder.Parent = workspace
 
 	local spawns: { [string]: BasePart } = {}
-	for _, instance in CollectionService:GetTagged(Config.Tags.RelicSpawn) do
+	for _, instance in Markers.tagged(Config.Tags.RelicSpawn) do
 		if instance:IsA("BasePart") then
 			spawns[instance.Name] = instance
 		end

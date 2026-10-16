@@ -107,6 +107,9 @@ function FieldHud.new(hud, request: (string) -> ())
 	layout.Padding = UDim.new(0, 4)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = panel
+	-- Where you are (milestone 5): region and depth, never coordinates.
+	self.placeText = text(panel, "Place", 14, { color = Color3.fromRGB(200, 225, 210) })
+	self.placeText.LayoutOrder = 0
 	self.healthText = text(panel, "HealthText", 14)
 	self.healthText.LayoutOrder = 1
 	local healthBack, healthFill = bar(panel, "HealthBar", 12, Color3.fromRGB(90, 200, 110))
@@ -242,6 +245,15 @@ end
 
 function FieldHud:_frame()
 	local now = workspace:GetServerTimeNow()
+
+	-- Place and depth
+	local region = player:GetAttribute("HB_Region")
+	local depth = player:GetAttribute("HB_Depth")
+	if region and typeof(depth) == "number" then
+		self.placeText.Text = `{region}  ·  {depth} m down`
+	else
+		self.placeText.Text = region or ""
+	end
 
 	-- Health (replicated from the server's Humanoid)
 	local character = player.Character

@@ -18,6 +18,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
 local Characters = require(script.Parent.Characters)
 local Guard = require(script.Parent.Guard)
+local Markers = require(script.Parent.Markers)
+local Reach = require(script.Parent.Reach)
 local RelicDefs = require(script.Parent.RelicDefs)
 local RelicStore = require(script.Parent.RelicStore)
 local ServerNet = require(script.Parent.ServerNet)
@@ -56,8 +58,9 @@ function ServiceStation.tryService(player: Player, station: BasePart)
 		ServerNet.notify(player, "Relic service is only available in town.", "error")
 		return
 	end
-	if (root.Position - station.Position).Magnitude > Config.Service.ServerMaxDistance then
-		ServerNet.notify(player, "Move closer to the service station.", "error")
+	local reachable, why = Reach.check(root, station, Config.Service.ServerMaxDistance)
+	if not reachable then
+		ServerNet.notify(player, if why == "Far" then "Move closer to the service station." else Reach.message(why), "error")
 		return
 	end
 	if Config.Service.Price > 0 then
@@ -130,10 +133,10 @@ end
 function ServiceStation.start(theStore, theSessions)
 	store = theStore
 	sessions = theSessions
-	for _, station in CollectionService:GetTagged(Config.Tags.ServiceStation) do
+	for _, station in Markers.tagged(Config.Tags.ServiceStation) do
 		attach(station)
 	end
-	CollectionService:GetInstanceAddedSignal(Config.Tags.ServiceStation):Connect(attach)
+	Markers.onAdded(Config.Tags.ServiceStation, attach)
 end
 
 return ServiceStation

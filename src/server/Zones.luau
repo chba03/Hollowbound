@@ -13,6 +13,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
 local Characters = require(script.Parent.Characters)
+local Markers = require(script.Parent.Markers)
+local Reach = require(script.Parent.Reach)
+local WorldInfo = require(script.Parent.WorldInfo)
 local ServerNet = require(script.Parent.ServerNet)
 
 local Zones = {}
@@ -43,7 +46,7 @@ end
 
 function Zones.zoneAt(position: Vector3): string
 	for _, entry in ZONE_TAGS do
-		for _, part in CollectionService:GetTagged(entry.tag) do
+		for _, part in Markers.tagged(entry.tag) do
 			if part:IsA("BasePart") and inside(part, position) then
 				return entry.zone
 			end
@@ -52,15 +55,16 @@ function Zones.zoneAt(position: Vector3): string
 	return "Depths"
 end
 
--- Town desk: inside a town zone and near a registry terminal or service station.
--- Appraisal and activation require this; it is always computed fresh on the server.
-function Zones.atDesk(position: Vector3): boolean
-	if Zones.zoneAt(position) ~= "Town" then
+-- Town desk: inside a town zone and able to reach a registry terminal or service
+-- station (distance, same level, clear line; milestone 5). Appraisal and activation need
+-- this; it is always computed fresh on the server.
+function Zones.atDesk(root: BasePart): boolean
+	if Zones.zoneAt(root.Position) ~= "Town" then
 		return false
 	end
 	for _, tag in { Config.Tags.RegistrationTerminal, Config.Tags.ServiceStation } do
-		for _, part in CollectionService:GetTagged(tag) do
-			if part:IsA("BasePart") and (part.Position - position).Magnitude <= Config.TownDesk.ServerMaxDistance then
+		for _, part in Markers.tagged(tag) do
+			if part:IsA("BasePart") and Reach.check(root, part, Config.TownDesk.ServerMaxDistance) then
 				return true
 			end
 		end
@@ -70,7 +74,7 @@ end
 
 function Zones.playerAtDesk(player: Player): boolean
 	local root = Characters.liveRoot(player)
-	return root ~= nil and Zones.atDesk(root.Position)
+	return root ~= nil and Zones.atDesk(root)
 end
 
 local function unsecuredCount(store, player: Player): number
@@ -93,13 +97,22 @@ function Zones.start(store)
 					continue
 				end
 				-- The HUD enables Appraise/Activate buttons from this; the server re-checks.
-				local atDesk = Zones.atDesk(root.Position)
+				local atDesk = Zones.atDesk(root)
 				if player:GetAttribute("HB_AtDesk") ~= atDesk then
 					player:SetAttribute("HB_AtDesk", atDesk)
 					ServerNet.pushState(player)
 				end
 
 				local zone = Zones.zoneAt(root.Position)
+				-- Region name and depth for the HUD (vertical world only; no coordinates).
+				local region = WorldInfo.regionAt(root.Position, zone)
+				if player:GetAttribute("HB_Region") ~= region then
+					player:SetAttribute("HB_Region", region)
+				end
+				local depth = WorldInfo.displayDepth(root.Position)
+				if player:GetAttribute("HB_Depth") ~= depth then
+					player:SetAttribute("HB_Depth", depth)
+				end
 				for _, listener in tickListeners do
 					listener(player, zone, root)
 				end

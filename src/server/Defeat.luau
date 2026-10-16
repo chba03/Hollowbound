@@ -35,6 +35,7 @@ local Net = require(Shared:WaitForChild("Net"))
 local Abilities = require(script.Parent.Abilities)
 local Guard = require(script.Parent.Guard)
 local RelicStore = require(script.Parent.RelicStore)
+local WorldInfo = require(script.Parent.WorldInfo)
 local ServerNet = require(script.Parent.ServerNet)
 local WorldRelics = require(script.Parent.WorldRelics)
 
@@ -47,6 +48,9 @@ local handledCharacters: { [Model]: boolean } = setmetatable({}, { __mode = "k" 
 local lastSafePosition: { [Player]: Vector3 } = {}
 
 local function aboveVoid(position: Vector3): boolean
+	if WorldInfo.belowKillPlane(position + Vector3.new(0, -Config.Death.VoidMargin * 0.2, 0)) then
+		return false -- at or just above the vertical world's kill plane (milestone 5)
+	end
 	return position.Y > workspace.FallenPartsDestroyHeight + Config.Death.VoidMargin
 end
 

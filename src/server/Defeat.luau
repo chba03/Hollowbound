@@ -11,10 +11,10 @@
 	Every character is processed at most once, however many times its death is
 	reported. Respawning creates a new character, which is watched separately.
 
-	Later milestones: the designed downed/revive stage (a defeated player can be revived
-	or use a self-rescue item before final death), ordinary carried gear, and body
-	looting. For now, any character death counts as final death, including Studio's
-	Reset Character.
+	Milestone 4: combat and creature damage first downs a character (Vitals); final death
+	happens only when the engine kills it (bleedout, Reset Character, the void) or the
+	field-departure rule applies. All of those reach this path exactly once per character.
+	Final-death hooks then drop ordinary supplies and finish the expedition run.
 
 	TEMPORARY departure rule (private prototype, milestone 3; NOT the final reconnect
 	design, which will add reconnect bodies and camp pause/resume):
@@ -41,6 +41,7 @@ local WorldRelics = require(script.Parent.WorldRelics)
 local Defeat = {}
 
 local store
+local finalDeathHooks: { (Player, Vector3) -> () } = {}
 local departedPlayers: { [Player]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 local handledCharacters: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 local lastSafePosition: { [Player]: Vector3 } = {}
@@ -113,6 +114,15 @@ local function describe(specimens): string
 	return table.concat(names, ", ")
 end
 
+--[[
+	fn(player, groundPoint) runs once per final death, after relics are handled, with a
+	safe ground point near where it happened (the same placement logic as relic drops).
+	Milestone 4 uses it to drop ordinary supplies and to finish the expedition run.
+]]
+function Defeat.onFinalDeath(fn: (Player, Vector3) -> ())
+	table.insert(finalDeathHooks, fn)
+end
+
 local function placeInWorld(player: Player, specimens, position: Vector3?, verb: string)
 	if #specimens == 0 then
 		return
@@ -161,6 +171,14 @@ local function applyFinalDeath(player: Player, position: Vector3?, source: strin
 		print(`[Hollowbound] {player.Name} kept registered {specimen.id}; needs service`)
 	end
 	print(`[Hollowbound] Final death of {player.Name} ({source}): {#dropped} dropped, {#protected} protected`)
+
+	local ground = dropCenter(player, position)
+	for _, hook in finalDeathHooks do
+		local ok, err = pcall(hook, player, ground + Vector3.new(0, Config.Death.DropHeightAboveGround, 0))
+		if not ok then
+			warn(`[Hollowbound] Final-death hook failed: {err}`)
+		end
+	end
 
 	if #dropped > 0 then
 		ServerNet.notify(player, `You dropped: {describe(dropped)}. Unregistered relics can be recovered by anyone.`, "error")

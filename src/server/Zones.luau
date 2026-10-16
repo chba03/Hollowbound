@@ -17,6 +17,19 @@ local ServerNet = require(script.Parent.ServerNet)
 
 local Zones = {}
 
+local tickListeners: { (Player, string, BasePart) -> () } = {}
+
+-- fn(player, zone, root) runs on every zone check for each living character.
+-- Expedition uses it to follow Town / Exploring / AtCamp without a require cycle.
+function Zones.onTick(fn: (Player, string, BasePart) -> ())
+	table.insert(tickListeners, fn)
+end
+
+-- True if the point is in a zone where milestone 4 combat damage cannot happen.
+function Zones.isProtected(position: Vector3): boolean
+	return Config.ProtectedZones[Zones.zoneAt(position)] == true
+end
+
 local ZONE_TAGS = {
 	{ tag = Config.Tags.TownZone, zone = "Town" },
 	{ tag = Config.Tags.CampZone, zone = "Camp" },
@@ -87,6 +100,9 @@ function Zones.start(store)
 				end
 
 				local zone = Zones.zoneAt(root.Position)
+				for _, listener in tickListeners do
+					listener(player, zone, root)
+				end
 				if player:GetAttribute("HB_Zone") == zone then
 					continue
 				end

@@ -16,6 +16,13 @@ return {
 	-- RemoteEvent: server -> one client, ability feedback for that player only.
 	AbilityFx = "AbilityFx",
 
+	-- RemoteFunction: client -> server, (action) -> { ok, message }. Actions: "Attack",
+	-- "Supply" (bandage while standing, self-rescue kit while downed), "Cancel".
+	-- No other arguments are read: the server decides targets, damage, and healing.
+	FieldAction = "FieldAction",
+	-- RemoteEvent: server -> one client, combat feedback (hits, damage taken, warnings).
+	CombatFx = "CombatFx",
+
 	-- Studio-only test hook. Only exists when Config.Dev.EnableDevRemotes is on and the
 	-- server runs in Studio. Sends a pickup request that skips the prompt's range limit,
 	-- so the server's own validation can be tested.

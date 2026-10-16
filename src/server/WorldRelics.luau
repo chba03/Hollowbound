@@ -26,6 +26,12 @@ local WorldRelics = {}
 local store
 local folder: Folder
 local partsById: { [string]: BasePart } = {}
+local claimedListeners: { (Player, string) -> () } = {}
+
+-- fn(player, specimenId) after a successful pickup (Encounters watches for its rewards).
+function WorldRelics.onClaimed(fn: (Player, string) -> ())
+	table.insert(claimedListeners, fn)
+end
 
 local REJECTIONS = {
 	NotFound = "That relic does not exist.",
@@ -81,7 +87,7 @@ function WorldRelics.tryPickup(player: Player, specimenId: any, source: string):
 		return false
 	end
 
-	local allowed, blocked = Guard.check(player)
+	local allowed, blocked = Guard.checkActive(player)
 	if not allowed then
 		ServerNet.notify(player, blocked :: string, "error")
 		return false
@@ -125,6 +131,9 @@ function WorldRelics.tryPickup(player: Player, specimenId: any, source: string):
 	local name = Config.RelicTypes[specimen.typeId].displayName
 	ServerNet.notify(player, `Picked up {name} ({specimen.rarity}). Unsecured until registered in town.`, "success")
 	ServerNet.pushState(player)
+	for _, listener in claimedListeners do
+		task.spawn(listener, player, specimenId)
+	end
 	if Config.Dev.LogTraitsToServerOutput then
 		print(`[Hollowbound] {player.Name} picked up {RelicStore.identityAndStates(specimen)} via {source}`)
 	else
@@ -135,6 +144,16 @@ end
 
 -- Places a specimen that final death returned to the world. The record must already
 -- be ownerless and in the world. Refuses to create a second world part for it.
+-- Places a newly generated encounter reward (ownerless, in the world) for normal pickup.
+function WorldRelics.spawnReward(specimen, position: Vector3): boolean
+	if specimen.ownerUserId ~= nil or specimen.location ~= "World" or partsById[specimen.id] then
+		warn(`[Hollowbound] Refused to place reward {specimen.id}`)
+		return false
+	end
+	spawnWorldPart(specimen, position, false)
+	return true
+end
+
 function WorldRelics.spawnDropped(specimen, position: Vector3): boolean
 	if specimen.ownerUserId ~= nil or specimen.location ~= "World" then
 		warn(`[Hollowbound] Refused to drop {specimen.id}: it is owned or not in the world`)

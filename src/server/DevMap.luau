@@ -208,6 +208,133 @@ function DevMap.ensureServiceStation()
 	print("[Hollowbound] Built development service station next to the registration terminal.")
 end
 
+-- Adds a free supply station 8 studs to the other side of the first registration
+-- terminal, as its own model (Workspace.HollowboundDevSupplyStation). Skipped if any
+-- part is already tagged as a supply station. Never edits the map or the terminal.
+function DevMap.ensureSupplyStation()
+	if #CollectionService:GetTagged(Tags.SupplyStation) > 0 then
+		return
+	end
+	local terminal = CollectionService:GetTagged(Tags.RegistrationTerminal)[1]
+	if not (terminal and terminal:IsA("BasePart")) then
+		warn("[Hollowbound] No registration terminal found; dev supply station not built.")
+		return
+	end
+	local model = Instance.new("Model")
+	model.Name = "HollowboundDevSupplyStation"
+	local size = Vector3.new(4, 3, 3)
+	local crate = Instance.new("Part")
+	crate.Name = "SupplyCrate"
+	crate.Anchored = true
+	crate.Size = size
+	crate.CFrame = terminal.CFrame * CFrame.new(-8, -terminal.Size.Y / 2 + size.Y / 2, 0)
+	crate.Color = Color3.fromRGB(110, 140, 90)
+	crate.Material = Enum.Material.WoodPlanks
+	crate.Parent = model
+	CollectionService:AddTag(crate, Tags.SupplyStation)
+	sign(crate, "Supply Station\nfree basic loadout", 5)
+	model.Parent = workspace
+	print("[Hollowbound] Built development supply station next to the registration terminal.")
+end
+
+--[[
+	Milestone 4 test arena as its own model (Workspace.HollowboundDevEncounterArena),
+	placed behind the expedition area relative to pedestal A: a bridge, a walled
+	platform, two regular creature spawns, a guardian den with its relic cache, two cover
+	walls for line-of-sight tests, and a small camp at the entrance for boundary tests.
+	Skipped if any creature spawn is already tagged (a hand-built encounter) or the model
+	exists. It never edits the map or other Workspace content.
+]]
+function DevMap.ensureEncounterFixtures()
+	if workspace:FindFirstChild("HollowboundDevEncounterArena") then
+		return
+	end
+	if #CollectionService:GetTagged(Tags.CreatureSpawn) > 0 then
+		print("[Hollowbound] Hand-placed creature spawns found; skipping the dev encounter arena.")
+		return
+	end
+	local anchor
+	for _, part in CollectionService:GetTagged(Tags.RelicSpawn) do
+		if part.Name == "RelicSpawnA" and part:IsA("BasePart") then
+			anchor = part
+		end
+	end
+	if not anchor then
+		warn("[Hollowbound] No RelicSpawnA found; dev encounter arena not built.")
+		return
+	end
+	local groundY = anchor.Position.Y - anchor.Size.Y / 2
+	local origin = Vector3.new(anchor.Position.X, groundY, anchor.Position.Z)
+
+	local model = Instance.new("Model")
+	model.Name = "HollowboundDevEncounterArena"
+
+	local function piece(name: string, size: Vector3, offset: Vector3, color: Color3, material: Enum.Material?)
+		local p = Instance.new("Part")
+		p.Name = name
+		p.Anchored = true
+		p.Size = size
+		p.Position = origin + offset
+		p.Color = color
+		p.Material = material or Enum.Material.Slate
+		p.TopSurface = Enum.SurfaceType.Smooth
+		p.BottomSurface = Enum.SurfaceType.Smooth
+		p.Parent = model
+		return p
+	end
+	local stone = Color3.fromRGB(80, 78, 88)
+	local wallColor = Color3.fromRGB(95, 90, 85)
+
+	-- Bridge from the expedition area's far edge, then the arena floor (70 x 70).
+	piece("Bridge", Vector3.new(10, 1, 12), Vector3.new(15, -0.5, -31), Color3.fromRGB(110, 100, 90), Enum.Material.WoodPlanks)
+	local floor = piece("ArenaFloor", Vector3.new(70, 1, 70), Vector3.new(15, -0.5, -72), stone)
+	sign(floor, "ENCOUNTER ARENA (test)", 10)
+
+	-- Low perimeter walls with a gap for the bridge.
+	piece("WallBack", Vector3.new(70, 4, 1), Vector3.new(15, 2, -107.5), wallColor, Enum.Material.Brick)
+	piece("WallLeft", Vector3.new(1, 4, 70), Vector3.new(-20.5, 2, -72), wallColor, Enum.Material.Brick)
+	piece("WallRight", Vector3.new(1, 4, 70), Vector3.new(50.5, 2, -72), wallColor, Enum.Material.Brick)
+	piece("WallFrontL", Vector3.new(30, 4, 1), Vector3.new(-5.5, 2, -36.5), wallColor, Enum.Material.Brick)
+	piece("WallFrontR", Vector3.new(30, 4, 1), Vector3.new(35.5, 2, -36.5), wallColor, Enum.Material.Brick)
+
+	-- Cover for breaking line of sight.
+	piece("CoverWest", Vector3.new(12, 8, 2), Vector3.new(0, 4, -80), wallColor, Enum.Material.Rock)
+	piece("CoverEast", Vector3.new(12, 8, 2), Vector3.new(30, 4, -80), wallColor, Enum.Material.Rock)
+
+	local function marker(name: string, offset: Vector3, attributes)
+		local m = piece(name, Vector3.new(4, 0.2, 4), offset + Vector3.new(0, 0.1, 0), Color3.fromRGB(150, 60, 50), Enum.Material.Neon)
+		m.Transparency = 0.6
+		m.CanCollide = false
+		m.CanQuery = false
+		m.CanTouch = false
+		for key, value in attributes do
+			m:SetAttribute(key, value)
+		end
+		CollectionService:AddTag(m, Tags.CreatureSpawn)
+		return m
+	end
+	marker("ThornbackSpawnWest", Vector3.new(-5, 0, -62), { Variant = "Regular" })
+	marker("ThornbackSpawnEast", Vector3.new(35, 0, -62), { Variant = "Regular" })
+	marker("MatriarchDen", Vector3.new(15, 0, -95), { Variant = "Guardian", EncounterId = "DevArenaDen" })
+
+	local cache = piece("RelicCache", Vector3.new(4, 2, 3), Vector3.new(15, 1, -103), Color3.fromRGB(120, 95, 60), Enum.Material.Wood)
+	cache:SetAttribute("EncounterId", "DevArenaDen")
+	CollectionService:AddTag(cache, Tags.RelicCache)
+
+	-- Small camp just inside the entrance (corner), for camp-boundary tests.
+	local campPad = piece("TestCampPad", Vector3.new(14, 0.2, 14), Vector3.new(42, 0.1, -45), Color3.fromRGB(90, 120, 70), Enum.Material.Grass)
+	sign(campPad, "TEST CAMP: refuge", 6)
+	local campZone = piece("TestCampZone", Vector3.new(14, 30, 14), Vector3.new(42, 15, -45), Color3.new(1, 1, 1))
+	campZone.Transparency = 1
+	campZone.CanCollide = false
+	campZone.CanQuery = false
+	campZone.CanTouch = false
+	CollectionService:AddTag(campZone, Tags.CampZone)
+
+	model.Parent = workspace
+	print("[Hollowbound] Built development encounter arena (2 Thornbacks, 1 Matriarch den with a cache, a test camp).")
+end
+
 -- Adds pedestals RelicSpawnC, D, and E for the milestone 3 test specimens (Echo Lens and
 -- exceptional relics) as their own model, Workspace.HollowboundDevRelicFixtures, 15
 -- studs in front of pedestal A. It never edits the map or pedestals A and B, and it is

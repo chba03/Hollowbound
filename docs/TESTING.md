@@ -9,6 +9,10 @@ This file has four kinds of tests. Keep them apart when you report results:
 | Part B | Milestone 3 two-client checks: appraisal, activation, loadout, abilities, controls | Studio mock or real | Studio, 2 clients |
 | Part C | **Real persistence**: rejoin, restart, competing sessions | **Real DataStores** in a separate test experience | Published test experience |
 | Part D | Short beginner playtest script | any | Studio |
+| Part E | Milestone 4 automated tests (Survival, Creatures) | none (pure rules) | Studio Output or `lune run tools/run-tests` |
+| Part F | Milestone 4 solo playtest | Studio mock or real | Studio, 1 client |
+| Part G | Milestone 4 two-client checklist | Studio mock or real | Studio, 2-3 clients |
+| Part H | Device, console, and cloud checks | real | phones, controllers, published test experience |
 
 Mock results never prove real saving. Only Part C does.
 
@@ -32,7 +36,7 @@ Milestone 3 changes to expect while running them:
    - [ ] `Built development relic fixtures (pedestals C-E).`
    - [ ] Five `Generated ...` lines. A and B have **different IDs and trait values**
          (A Common, B Rare). C is an Uncommon Echo Lens; D and E are Exceptional.
-   - [ ] `Milestone 3 server ready (storage: ...)`
+   - [ ] `Milestone 4 server ready (storage: ...)`
    - [ ] For each player: `Loaded StudioMock profile for -1: 0 relic(s) ...` (or `Real`
          if API access is on). Each client shows a purple **MOCK STORAGE** badge in mock mode.
 4. In both client windows, the player stands in **Town**. The top label reads "Town", and the
@@ -436,3 +440,175 @@ on real DataStores; they are covered by Part A's failure injection.
 10. Walk out to the camp and reset your character. You respawn with both relics, now
     **NEEDS SERVICE**. Hold **E** at the wooden **Relic Service** bench in town to repair
     and recharge them.
+
+---
+
+# Milestone 4: the first dangerous PvE expedition
+
+Setup for every part below: **Test**, then **Start** (1 player for the solo script,
+**2 Players** for Part G). Mock storage (purple badge) is fine. The server Output should
+also show:
+- [ ] `Built development supply station next to the registration terminal.`
+- [ ] `Built development encounter arena (2 Thornbacks, 1 Matriarch den with a cache, a test camp).`
+- [ ] `Milestone 4 server ready (storage: ...)`, and no `Creature #... update failed` warnings.
+
+The arena is behind the expedition area: walk past pedestals A-E and cross the bridge.
+
+## Part E. Automated tests (pure rules, test-only)
+
+Run either way. Both use only pure modules and the test-only mock storage:
+- Studio: the server Output at start.
+- Outside Studio: `lune run tools/run-tests`.
+
+- [ ] `Survival: N/N passed` and `Creatures: N/N passed`, plus the milestone 1-3 suites,
+      with `Self-test finished: N/N passed`.
+
+| Requirement | Covered by |
+|---|---|
+| Damage amounts validated; lethal damage downs, never kills; no damage while downed | Survival |
+| Revive needs the current character and down (stale or duplicate revives refused, including after a respawn) | Survival |
+| Bleedout fires only for the current down; death recorded once | Survival |
+| Runs: start on leaving town, kept through camps, finished once; allowance per run, stale runs refused | Survival |
+| Timed actions: server clock, one at a time, cancelled when conditions fail, interrupts | Survival |
+| Bandage consumed only on completion, never when interrupted | Survival |
+| One helper per down; simultaneous helpers refused | Survival |
+| Supplies: bounded refill, capacity, unique drops, one winner, no duplication, partial pickups | Survival |
+| Creature brain: detection, telegraph then strike, recovery opening, downed ignored, leash and reset, protected zones, lost sight, unreachable targets | Creatures |
+| Guardian cycles: locked cache, exactly one reward per cycle, stale or repeated callbacks, environmental loss, repeated cycles | Creatures |
+| Contested reward pickup, and the reward keeping ID and traits through death, recovery, and registration | Creatures |
+| Melee hit selection: range, arc, line of sight, one hit per target, non-finite input, cooldown | Creatures |
+
+Not automatable outside Studio (checked by hand below): Roblox physics and pathing,
+ProximityPrompt hold events, Humanoid death events, and the HUD.
+
+## Part F. Solo playtest (about 15 minutes)
+
+1. [ ] Spawn in town. The top-left panel shows `Health 100 / 100` and `No weapon`.
+2. [ ] Hold **E** at the green **Supply Station** next to the terminal: `Supplied:
+       Starter blade x1, Bandage x3, Self-rescue kit x1`. A blade appears in your right
+       hand. Use the station again: `You already carry the basic loadout.`
+3. [ ] Try **Attack** (click, **F**, or the Attack button) in town:
+       `You cannot attack from inside town or a camp.`
+4. [ ] Walk out: the label changes to `Exploring` and a message says the expedition
+       started. Health no longer regenerates.
+5. [ ] Cross into the arena. A **Thornback** notices you (when you are in its view, or
+       within about 10 studs) and chases. When it glows red with a "!", the banner warns
+       `...is about to strike you: move away!`. Step back out of reach: no damage.
+6. [ ] Fight it: each swing shows the blade sweeping, and hits show `Hit: 18`. Swinging
+       while on cooldown does nothing extra. It falls after 4 hits (60 health), fades,
+       and respawns after about 90 s.
+7. [ ] Take some damage, then press **H** (Heal): `Bandaging...` with a progress bar,
+       then `Bandaged: +35 health`, and the bandage count drops by 1. Start another and get
+       hit: `You were hit. The bandage was not used.` The count does not change.
+8. [ ] Break contact: run behind a cover wall and stay out of sight. After a few seconds
+       the Thornback gives up and walks back to its den.
+9. [ ] Camp protection: lure a Thornback toward the **test camp** (front-right corner)
+       and step inside. It stops at the edge and returns, and you take no damage inside.
+       Attacking from inside is refused.
+10. [ ] The **Matriarch** at the back wall guards a cache. The cache prompt says it is
+        sealed while she lives. Fight her using her **long recovery after each strike**
+        (the opening), and bandage when needed. When she falls, `Unlocked` appears and a
+        relic orb sits on the cache. Echo Lens (if equipped) marks it.
+11. [ ] Pick up the reward. Server Output shows `Encounter DevArenaDen reward: ...` and
+        later `claimed ... resets in 180 s`.
+12. [ ] Get downed on purpose (let a Thornback hit you at low health): `DOWNED`,
+        `Bleeding out in 30 s`, crawling, no jumping. Attack, Heal, relic slots, and pickups
+        are refused. Creatures stop attacking you.
+13. [ ] Press **H** (Rescue kit): after 5 s you stand with 25 health, the kit count drops
+        by 1, and `Self-rescues left this expedition: 0`.
+14. [ ] Get downed again: the hint says the self-rescue was already used. Visit the test
+        camp first if you like: the allowance stays 0. Let the bleedout finish: final
+        death drops the unregistered reward relic **and** a supplies crate beside it.
+        You respawn in town with an empty supply list.
+15. [ ] Refill, walk back, pick up your crate (`Picked up ...`) and the relic orb, return
+        to town (`Back in town...`), and register the relic at the terminal. The pack shows
+        **REGISTERED**, with the same ID as in the `reward:` Output line.
+
+## Part G. Two-client checklist
+
+Start **2 Players**. Both players take supplies first.
+
+### G1. Revive and its cancellation
+- [ ] Player1 gets downed in the arena. Player2 sees a red `DOWNED` marker above Player1
+      and a **Revive** prompt up close. Player1 does not see a prompt on themself.
+- [ ] Player2 holds **Revive** for 4 s: Player1 stands with 35 health, and both get
+      messages. Player1's overlay shows `Player2 is reviving you...` with progress.
+- [ ] Release early: `You let go. The revive stopped.` Player1 stays downed.
+- [ ] Walk away while holding (beyond 9 studs) or put a wall between you: the revive
+      cancels with a reason.
+- [ ] Get hit while reviving: the revive cancels (`You were hit.`).
+
+### G2. Simultaneous helpers (needs a third client, or swap roles)
+- [ ] With a third player (**3 Players**), two helpers hold Revive together. Only one
+      revive starts (`Someone is already reviving them.`), and Player1 is revived once with
+      35 health, not 70.
+
+### G3. Downed, final death, and loot transfer
+- [ ] Player1 carries an unregistered relic plus supplies and bleeds out in the arena.
+      One relic orb and one supplies crate drop (Output: `dropped supplies loot-N`).
+- [ ] Player2 and Player1 (after respawning) both try to take the crate at the same
+      moment: one gets the items and the other gets `Those supplies are gone.` Nobody
+      ends up with extra items.
+- [ ] Player2 with full bandages picks up a crate holding bandages: only what fits is
+      taken. The crate stays with the rest, and its label updates.
+
+### G4. Idempotency: reset, void, departure
+- [ ] Player1 downed, then **Reset Character**: exactly one `Final death of Player1` line,
+      one drop set, no revive prompt left behind, and no `bled out` line afterwards.
+- [ ] Player1 downed near an arena edge, Baseplate deleted in the Server window: crawl off
+      the edge. One final death, items at the last safe position.
+- [ ] Player1 downed in the arena, then closes their window: Output shows
+      `Final death of Player1 (left outside town)` once. Relics and a supplies crate drop.
+- [ ] Press **L** (dev repeated death) while carrying supplies: one final death, one crate.
+- [ ] After respawning, an old revive or bleedout from the previous character never
+      affects the new one (no stray `revived` or `bled out` lines).
+
+### G5. Contested cache and guardian behaviour
+- [ ] Both players fight the Matriarch. When she falls, both press **E** on the reward
+      at once (or press **J** in both windows): exactly one owns it. The other gets
+      `Someone else picked that relic up first.` (or `That relic is no longer there.`).
+- [ ] Whoever lands the last hit gets no automatic reward; only the pickup counts.
+- [ ] The Matriarch never attacks a downed player while a standing one is near. With
+      both downed, she returns to her den.
+- [ ] Both players leave the arena and come back before 180 s: the encounter has **not**
+      reset (no new guardian). Rejoining also does not reset it.
+- [ ] After the claim and 180 s, a new Matriarch appears and the cache is locked again
+      (`Encounter DevArenaDen resets` in Output). Repeat a few cycles: one reward per cycle,
+      and no leftover creatures or orbs (check `Workspace.HollowboundCreatures` and
+      `HollowboundWorldRelics`).
+
+### G6. Camp protection and boundary abuse
+- [ ] Standing just inside the test camp edge, Player1 cannot attack a Thornback right
+      outside (`You cannot attack from inside town or a camp.`).
+- [ ] Lure a Thornback to the camp, step in and out repeatedly, hitting it from outside:
+      when it loses you it returns to its den and heals to full (its health bar refills).
+- [ ] No creature walks into the camp or the town, even when chasing.
+
+### G7. Relic regression during combat
+- [ ] Windhook (activated) and Echo Lens work while exploring and fighting, and are
+      refused while downed. Using one interrupts a bandage.
+- [ ] Equip, unequip, appraisal, activation, registration, and service behave as in Part B.
+      Registration and camps never refill charges.
+- [ ] Final death: unregistered relics drop with the same ID; registered ones stay with
+      **NEEDS SERVICE**, as in milestone 2. Registered relics still save and rejoin
+      correctly (Part C on a published test experience).
+
+### G8. Controls and HUD
+- [ ] Keyboard and mouse: click and **F** attack (a click on a HUD button never attacks),
+      **H** heals.
+- [ ] Touch (**Test**, then **Device**, then a phone): the **Attack** and **Heal** buttons
+      work; the Heal button reads **Rescue kit** while downed. The Revive prompt is
+      tappable. Text stays readable at phone size.
+- [ ] Controller (if connected): **R2** attacks, **Y** heals or rescues, and the prompt
+      button revives. The button hints switch to controller names.
+- [ ] Normal player UI shows no ids, tokens, or debug text (those stay in server Output).
+
+## Part H. Checks only you can run (devices and cloud)
+
+These were **not** run by the assistant:
+- Real phone and tablet (Roblox app) and a real controller or console: input, layout,
+  and readability.
+- A published test experience with several real accounts: latency effects on melee range
+  and telegraph dodging, revive across real network latency, server physics ownership of
+  creatures, and saving and rejoining (Part C) with milestone 4 active.
+- Performance with the creature budget full (12) and several players.

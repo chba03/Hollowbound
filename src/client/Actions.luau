@@ -8,6 +8,9 @@
 	  UseSlot1/2/3     1 / 2 / 3        D-pad left / up / right
 	  ToggleRelics     B                D-pad down
 	  CloseMenu        (B toggles)      B button (only while the relic menu is open)
+	  Attack           left click, F    R2            (milestone 4)
+	  Supply           H                Y button      bandage / self-rescue kit; again cancels
+	Touch uses the on-screen buttons for every action. A left click on UI never attacks.
 ]]
 
 local ContextActionService = game:GetService("ContextActionService")
@@ -21,6 +24,8 @@ local DEFINITIONS = {
 	UseSlot3 = { keys = { Enum.KeyCode.Three, Enum.KeyCode.DPadRight }, keyboard = "3", gamepad = "D-pad right" },
 	ToggleRelics = { keys = { Enum.KeyCode.B, Enum.KeyCode.DPadDown }, keyboard = "B", gamepad = "D-pad down" },
 	CloseMenu = { keys = { Enum.KeyCode.ButtonB }, keyboard = "B", gamepad = "B button" },
+	Attack = { keys = { Enum.KeyCode.F, Enum.KeyCode.ButtonR2 }, keyboard = "F / click", gamepad = "R2", mouse = true },
+	Supply = { keys = { Enum.KeyCode.H, Enum.KeyCode.ButtonY }, keyboard = "H", gamepad = "Y" },
 }
 
 local handlers: { [string]: (...any) -> () } = {}
@@ -61,6 +66,25 @@ function Actions.setBound(name: string, enabled: boolean)
 		bound[name] = nil
 		ContextActionService:UnbindAction(prefix(name))
 	end
+end
+
+-- Left click attacks only when the click was not used by UI or typing.
+local mouseBound = false
+function Actions.bindMouse()
+	if mouseBound then
+		return
+	end
+	mouseBound = true
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if processed or input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			return
+		end
+		for name, def in DEFINITIONS do
+			if def.mouse and bound[name] then
+				Actions.run(name)
+			end
+		end
+	end)
 end
 
 local function kindOf(inputType: Enum.UserInputType): string?

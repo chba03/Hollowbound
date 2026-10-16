@@ -48,7 +48,7 @@ local SAVE_COLORS = {
 local ZONE_TEXT = {
 	Town = "Town",
 	Camp = "Camp: refuge (relics stay unsecured)",
-	Depths = "Depths",
+	Depths = "Exploring",
 }
 
 local SLOT_ACTIONS = { "UseSlot1", "UseSlot2", "UseSlot3" }
@@ -238,6 +238,7 @@ function Hud.new(playerGui: PlayerGui, request: (string, ...any) -> ())
 	self.relicsButton = button(bar, "RelicsButton", "Relics", function()
 		Actions.run("ToggleRelics")
 	end, { dims = UDim2.fromOffset(96, 96), order = 100, color = COLORS.buttonPrimary })
+	self.bar = bar
 
 	-- Relic menu (center), hidden until opened
 	local menu = Instance.new("Frame")
@@ -734,6 +735,11 @@ function Hud:toast(text: string, kind: string?)
 		local info = TweenInfo.new(0.6)
 		TweenService:Create(toast, info, { BackgroundTransparency = 1, TextTransparency = 1 }):Play()
 	end)
+end
+
+-- Adds a big button to the loadout bar (milestone 4: Attack, Heal). Returns it.
+function Hud:addBarButton(name: string, text: string, order: number, onActivated: () -> ()): TextButton
+	return button(self.bar, name, text, onActivated, { dims = UDim2.fromOffset(96, 96), order = order, size = 15 })
 end
 
 function Hud:showDevHint(text: string)

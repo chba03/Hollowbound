@@ -43,7 +43,7 @@ local function wantsService(specimen): boolean
 end
 
 function ServiceStation.tryService(player: Player, station: BasePart)
-	local allowed, blocked = Guard.check(player)
+	local allowed, blocked = Guard.checkActive(player)
 	if not allowed then
 		ServerNet.notify(player, blocked :: string, "error")
 		return

@@ -1,9 +1,11 @@
 --[[
-	Hollowbound server entry point (milestone 3).
+	Hollowbound server entry point (milestone 4).
 	The server owns specimen generation, inventories, ownership, registration, final
-	death, service, appraisal, activation, loadouts, abilities, and saved profiles.
+	death, service, appraisal, activation, loadouts, abilities, and saved profiles, plus
+	(milestone 4) expeditions, health and the downed stage, melee combat, creatures,
+	guardian encounters, ordinary supplies, and revives.
 	Registered relics persist through ProfileStore (Sessions + ProfileBackend);
-	unregistered relics live only in server memory.
+	unregistered relics and ordinary items live only in server memory.
 ]]
 
 local Players = game:GetService("Players")
@@ -14,18 +16,27 @@ local Shared = ReplicatedStorage:WaitForChild("HollowboundShared")
 local Config = require(Shared:WaitForChild("Config"))
 local LoadoutRules = require(Shared:WaitForChild("LoadoutRules"))
 local Abilities = require(script.Abilities)
+local Busy = require(script.Busy)
+local Combat = require(script.Combat)
+local Creatures = require(script.Creatures)
 local Defeat = require(script.Defeat)
 local DevMap = require(script.DevMap)
+local Encounters = require(script.Encounters)
+local Expedition = require(script.Expedition)
+local FieldActions = require(script.FieldActions)
+local Gear = require(script.Gear)
 local Guard = require(script.Guard)
 local ProfileBackend = require(script.ProfileBackend)
 local Registration = require(script.Registration)
 local RelicActions = require(script.RelicActions)
 local RelicStore = require(script.RelicStore)
 local RelicView = require(script.RelicView)
+local Rescue = require(script.Rescue)
 local SelfTest = require(script.SelfTest)
 local ServerNet = require(script.ServerNet)
 local ServiceStation = require(script.ServiceStation)
 local Sessions = require(script.Sessions)
+local Vitals = require(script.Vitals)
 local WorldRelics = require(script.WorldRelics)
 local Zones = require(script.Zones)
 
@@ -49,6 +60,12 @@ if inStudio and Config.Dev.BuildServiceStation then
 end
 if inStudio and Config.Dev.BuildRelicFixtures then
 	DevMap.ensureRelicFixtures()
+end
+if inStudio and Config.Dev.BuildSupplyStation then
+	DevMap.ensureSupplyStation()
+end
+if inStudio and Config.Dev.BuildEncounterFixtures then
+	DevMap.ensureEncounterFixtures()
 end
 
 local store = RelicStore.new()
@@ -86,7 +103,15 @@ local sessions = Sessions.new({
 Guard.setSessions(sessions)
 
 ServerNet.start(function(player)
-	return RelicView.state(store, sessions, player, Zones.playerAtDesk(player))
+	local state = RelicView.state(store, sessions, player, Zones.playerAtDesk(player))
+	-- Milestone 4: ordinary items (session-only) for the HUD.
+	local weaponId = Gear.weapon(player)
+	state.gear = {
+		items = Gear.contents(player),
+		weapon = if weaponId then Config.Items[weaponId].displayName else "",
+		selfRescuesLeft = Expedition.selfRescuesLeft(player),
+	}
+	return state
 end)
 WorldRelics.start(store)
 Registration.start(store, sessions)
@@ -95,6 +120,32 @@ ServiceStation.start(store, sessions)
 Abilities.start(store, sessions, unixNow)
 RelicActions.start(store, sessions)
 Defeat.start(store)
+
+-- Milestone 4 systems.
+Busy.start()
+Vitals.start()
+Expedition.start()
+Gear.start()
+Rescue.start()
+Creatures.start()
+Combat.start()
+Encounters.start(store)
+FieldActions.start()
+
+-- Going down ends relic effects that need a standing user.
+Vitals.onDowned(function(player)
+	Abilities.endAll(player.UserId)
+	ServerNet.pushState(player)
+end)
+Vitals.onRevived(function(player)
+	ServerNet.pushState(player)
+end)
+-- Final death (bleedout, reset, void, field departure): supplies drop next to the
+-- relic drops, and the expedition run ends. Both run once, inside Defeat's guard.
+Defeat.onFinalDeath(function(player, point)
+	Gear.dropAll(player, point + Vector3.new(2.5, 0, 0))
+	Expedition.finishRun(player, "final death")
+end)
 
 local function onPlayerAdded(player: Player)
 	local ok, err = sessions:load(player.UserId, function()
@@ -154,8 +205,13 @@ Players.PlayerRemoving:Connect(function(player)
 		mode = if zone == "Town" then "Town" else "Field"
 	end
 	-- Temporary departure rule first (it may change relics), then save and clean up.
+	-- A downed player leaving outside town gets the same single final death.
 	Defeat.handleDeparture(player, mode)
+	-- Ordinary items are session-only: whatever was not dropped by a final death above
+	-- (town departure, shutdown, lost session) is discarded.
+	Gear.discard(player)
+	Expedition.finishRun(player, "left the game")
 	sessions:depart(player.UserId)
 end)
 
-print(`[Hollowbound] Milestone 3 server ready (storage: {backend.kind}, resolving in background).`)
+print(`[Hollowbound] Milestone 4 server ready (storage: {backend.kind}, resolving in background).`)

@@ -21,6 +21,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
 local AbilityRules = require(script.Parent.AbilityRules)
 local Characters = require(script.Parent.Characters)
+local Busy = require(script.Parent.Busy)
 local Guard = require(script.Parent.Guard)
 local RelicDefs = require(script.Parent.RelicDefs)
 local RelicView = require(script.Parent.RelicView)
@@ -170,7 +171,7 @@ local REASONS = {
 
 -- Returns (ok, message).
 function Abilities.use(player: Player, slot: any): (boolean, string)
-	local allowed, blocked = Guard.check(player)
+	local allowed, blocked = Guard.checkActive(player)
 	if not allowed then
 		return false, blocked :: string
 	end
@@ -205,6 +206,8 @@ function Abilities.use(player: Player, slot: any): (boolean, string)
 		return false, REASONS[reason :: string] or RelicView.BLOCKERS[reason :: string] or "You cannot use that relic now."
 	end
 
+	-- Using a relic is a deliberate choice: it stops a bandage in progress (milestone 4).
+	Busy.interrupt(player, "You used a relic.")
 	local message
 	if params.abilityId == "Windhook" then
 		message = windhook(player, root, specimen, params)

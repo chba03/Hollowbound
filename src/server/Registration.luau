@@ -29,7 +29,7 @@ local function describe(specimens): string
 end
 
 function Registration.tryRegister(player: Player, terminal: BasePart)
-	local allowed, blocked = Guard.check(player)
+	local allowed, blocked = Guard.checkActive(player)
 	if not allowed then
 		ServerNet.notify(player, blocked :: string, "error")
 		return

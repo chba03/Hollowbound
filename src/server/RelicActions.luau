@@ -159,7 +159,8 @@ function RelicActions.handle(player: Player, action: any, a: any, b: any): (bool
 		return false, "Unknown action."
 	end
 	if action ~= "Use" then
-		local allowed, blocked = Guard.check(player)
+		-- Downed players cannot manage their relics (milestone 4).
+		local allowed, blocked = Guard.checkActive(player)
 		if not allowed then
 			return false, blocked :: string
 		end

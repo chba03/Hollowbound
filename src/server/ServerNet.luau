@@ -35,6 +35,8 @@ function ServerNet.start(builder: (Player) -> any)
 	make("RemoteEvent", Net.Notify, folder)
 	make("RemoteFunction", Net.RelicAction, folder)
 	make("RemoteEvent", Net.AbilityFx, folder)
+	make("RemoteFunction", Net.FieldAction, folder)
+	make("RemoteEvent", Net.CombatFx, folder)
 	if Config.Dev.EnableDevRemotes and RunService:IsStudio() then
 		make("RemoteEvent", Net.DevPickupRequest, folder)
 		make("RemoteEvent", Net.DevRepeatDeath, folder)
@@ -65,6 +67,20 @@ end
 function ServerNet.abilityFx(player: Player, payload)
 	if player.Parent then
 		remotes[Net.AbilityFx]:FireClient(player, payload)
+	end
+end
+
+function ServerNet.combatFx(player: Player, payload)
+	if player.Parent then
+		remotes[Net.CombatFx]:FireClient(player, payload)
+	end
+end
+
+-- handler(player, action) -> (ok: boolean, message: string). Extra arguments are dropped.
+function ServerNet.onFieldAction(handler)
+	remotes[Net.FieldAction].OnServerInvoke = function(player, action)
+		local ok, message = handler(player, action)
+		return { ok = ok == true, message = message or "" }
 	end
 end
 

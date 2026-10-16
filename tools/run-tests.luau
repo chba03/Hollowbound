@@ -7,8 +7,10 @@
 	game. It rebuilds the part of the Rojo instance tree the tests need from src/
 	(ReplicatedStorage.HollowboundShared and ServerScriptService.HollowboundServer) and
 	provides minimal stand-ins for the few Roblox APIs those modules touch: game:GetService,
-	script/Parent/WaitForChild, Random, Color3, and warn. Anything else raises an error, so
-	a test that starts depending on more of Roblox fails loudly instead of passing by accident.
+	script/Parent/WaitForChild, Random, and warn. Roblox datatypes and detached Instances
+	(Vector3, CFrame, Color3, Instance, Enum, ...) come from Lune's @lune/roblox, so the
+	world installer can be tested on isolated instance trees. Anything else raises an
+	error, so a test that starts depending on more of Roblox fails loudly.
 
 	Storage: the suites use MockBackend (in-memory, test-only). Nothing here can reach
 	ProfileStore or a DataStore. Passing here proves the game rules, not Roblox behaviour;
@@ -20,6 +22,7 @@
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 local process = require("@lune/process")
+local roblox = require("@lune/roblox")
 
 -- Minimal Roblox stand-ins -------------------------------------------------------------
 
@@ -184,7 +187,16 @@ local function requireNode(node)
 			require = requireNode,
 			warn = warnShim,
 			Random = RandomShim,
-			Color3 = Color3Shim,
+			Color3 = roblox.Color3,
+			Vector3 = roblox.Vector3,
+			Vector2 = roblox.Vector2,
+			CFrame = roblox.CFrame,
+			UDim2 = roblox.UDim2,
+			NumberRange = roblox.NumberRange,
+			NumberSequence = roblox.NumberSequence,
+			ColorSequence = roblox.ColorSequence,
+			Instance = roblox.Instance,
+			Enum = roblox.Enum,
 		},
 	})
 	local result = chunk()

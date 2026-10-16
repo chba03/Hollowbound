@@ -17,6 +17,7 @@ local SUITES = {
 	Tests.PersistenceTests,
 	Tests.SurvivalTests,
 	Tests.CreatureTests,
+	Tests.WorldTests,
 }
 
 function SelfTest.run(): boolean

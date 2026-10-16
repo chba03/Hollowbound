@@ -1,4 +1,4 @@
-# Hollowbound: milestone 4
+# Hollowbound: milestone 5 (in progress)
 
 A shared test place for the relic system: pickup and town registration, final death with
 dropped and protected relics, town service, saved registered relics, appraisal and
@@ -249,7 +249,7 @@ and return to register the discovery.**
 
 ### Creatures and the guarded relic
 - One original placeholder creature, the **Thornback** (name provisional), in two
-  variants from config: **Thornback** (regular) and **Thornback Matriarch** (guardian).
+  variants from config: **Thornback** (regular) and **Rootwarden** (guardian; called the Thornback Matriarch in milestone 4).
   Both use the same AI: patrol or idle, detection (sight within a field of view, or
   hearing up close), pursuit, a **telegraphed** attack (red glow, "!", HUD warning),
   recovery, return to the den, and death.
@@ -354,13 +354,158 @@ All names and numbers above are placeholders (Open).
 - A downed explorer who crawls into town or a camp is safe from creatures, but still
   bleeds out unless revived.
 
-## 5. Project layout
+## 5. The vertical world (milestone 5, in progress, not owner-tested)
+
+A rim town circles a huge open shaft. The first depth lies physically below it.
+
+```
+              top view (angles)                      side view (studs below the rim)
+                     90                               0   Rim Town (paved ring + hills)
+        Sunward Overlook 110 . Guardian 85 below        20-140  Gatestair ramps -> Overhang Shelf (60)
+   180 Bellwatch ---( shaft 420 across )--- 0 Service   140  Root Bridge -> Elder Tree; Lantern Ruins (A, B)
+        Elder Tree 165  Mistfall Camp 182-208          140-380  Elder Tree spiral walkway (alternate route)
+        Mistfall Overlook 200   Eastward Overlook 290     236  Mistfall Camp (bridge from the tree)
+                     270  floor landing 290          236-380  east ramps -> scaffold stairs -> floor
+                                                          380  Verdant Floor: Thornback Range, Rootwarden
+                                                               clearing + cache, pool, ruins, sky ledge (E)
+                                                     380-520  The Lower Dark (background only, closed)
+                                                          560  kill plane (void)
+```
+
+### Key places (absolute Workspace coordinates, default origin)
+
+| Place | Coordinates (X, Y, Z) | Notes |
+|---|---|---|
+| World origin (rim center, rim surface) | (0, 600, 4000) | `Config.World.Origin` |
+| Town spawn (plaza) | (262, 601, 4000) | `HB_TownSpawn` |
+| Registry terminal (register, appraise, activate) | (298, 604, 3937) | Registry Hall |
+| Service bench | (299, 602, 4064) | Relic Workshop |
+| Supply station | (269, 602, 4137) | Supply Depot |
+| Descent Gate | about (191, 600, 4069) | 20 degrees, at the opening |
+| Lantern Ruins pedestals A, B | (-174, 461, 4100), (-170, 461, 4107) | 140 deep, optional branch |
+| Mistfall Camp | about (-200, 364, 3946) | 236 deep, refuge |
+| Relic C (pool), D (Thornback Range) | (-73, 221, 3818), (118, 221, 4021) | floor, 380 deep |
+| Relic E (sky ledge, Windhook only) | (-104, 231, 4195) | 10 studs above the floor |
+| Thornback dens | (130, 220, 3925), (143, 220, 4082) | regular creatures |
+| Rootwarden den and cache | (14, 220, 4159), (17, 221, 4195) | guardian encounter `VerdantRootwarden` |
+| Kill plane | Y = 40 | below the floor and the Lower Dark |
+
+`lune run tools/build-world` prints these from the current layout.
+
+### The route, both ways, without Windhook
+Descent Gate, then the Gatestair ramps along the wall, the Overhang Shelf (60 deep), and
+more ramps to the bridge head (140). The **Root Bridge** crosses to the **Elder Tree**. Its
+spiral walkway goes down to the floor (the alternate route), and a bridge at 236 deep leads
+to **Mistfall Camp**. From camp, the east ramps lead to a **scaffold stair tower** (with an
+optional climbing truss beside it), then the floor landing at 290 degrees.
+
+Every walkway is a ramp, stair, landing, or bridge no steeper than 35 degrees (the steepest
+is about 30). Railings are on the open side, and every part is walkable in both directions,
+so you return with loot by physically climbing back. The optional **Lantern Ruins** ledge
+branches off at the bridge head.
+
+**Windhook-only discovery:** the **sky ledge** on the floor (relic E) is 10 studs high, too
+high to jump.
+
+### World installation (edit mode, saved with the place)
+
+The world is not built at runtime. Install it once in Studio and save the place:
+
+1. Start Rojo (`rojo serve`). In Studio, open your place and connect Rojo
+   (**Plugins**, then **Rojo**, then **Connect**). Make sure you are in edit mode, not
+   Play.
+2. Open **View**, then **Command Bar**, and run this single line:
+   ```lua
+   require(game:GetService("ServerScriptService").HollowboundServer.World.Installer:Clone()).install()
+   ```
+   Output shows `World installed: N parts...` and `Install OK. Now save the place`.
+   Warnings list plan problems or parts that block the shaft (for example a Baseplate in
+   the way). Fix them and run the line again.
+3. **Save the place** (**File**, then **Save to File** or **Publish to Roblox**). The world
+   now exists in edit mode and in every playtest.
+
+Re-running the same line rebuilds only the generated groups (children of
+`Workspace.HollowboundWorld` with the `HB_Generated` attribute). It never duplicates
+zones, services, lights, or encounters. It keeps everything in
+`Workspace.HollowboundWorld.AuthoredDecor`, and never touches anything else in Workspace
+or global Terrain. Put hand-made decorations inside `AuthoredDecor`.
+
+Other commands (same pattern, replace `.install()`):
+- `.report()` validates the plan without changing the place;
+- `.uninstall()` removes the generated groups and keeps `AuthoredDecor`;
+- `.restoreLighting()` restores the Lighting that existed before the first install.
+
+**Lighting preset `VerdantRim`.** The first install saves the previous Lighting
+properties, and moves any existing Atmosphere, into `Lighting.HollowboundLightingBackup`.
+It then adds `HB_Atmosphere`, `HB_Bloom`, `HB_ColorCorrection`, and `HB_SunRays`. Other
+Lighting effects are untouched. Turn this off with `Config.World.ApplyLightingPreset =
+false`.
+
+**Rebuild workflow** after editing `World/Layout.luau`, `World/Planner.luau`, or
+`Config.World`:
+1. Rojo syncs the code.
+2. Run the install line again.
+3. Save the place.
+4. Commit the code.
+
+### What lives where (Git vs the Studio place)
+
+| Content | Where it lives | How it is kept |
+|---|---|---|
+| All scripts, `Config`, world definitions (`src/server/World/*`), tests, docs | Git | commit and push |
+| The installed world model `Workspace.HollowboundWorld` | the saved place | reinstall from Git at any time (code is the source of truth) |
+| Hand-made decorations in `HollowboundWorld.AuthoredDecor` | **only the saved place** | save the place; also right-click `AuthoredDecor`, then **Save to File** (`.rbxm`), to back it up |
+| Lighting preset values in the place, the backup, and place settings (streaming, avatar type, Lighting technology) | **only the saved place** | save the place |
+| `build/HollowboundWorld.rbxm` from `lune run tools/build-world` | local, git-ignored | regenerate any time |
+
+A Git commit **never** saves Studio-built content. Back up the place file itself (for
+example `HollowboundBackups/places/Hollowbound-YYYY-MM-DD.rbxl`) after every session that
+changes Studio content.
+
+### Selecting the world
+`Config.World.Mode = "Vertical"` (default) uses the installed world. In Studio, if it is not
+installed, the legacy dev map is used instead, with a warning
+(`LegacyFallbackInStudio`). `Mode = "Legacy"` selects the milestone 1-4 dev map and test
+fixtures on purpose. Services bind only to markers of the active world, so a place
+containing both never gets two spawns, two terminals, or two sets of creatures.
+
+### Studio settings to check by hand (cannot be set from game code)
+- **Game Settings, then Avatar:** set Avatar type to **R15** (poses target R15 joints; R6
+  works but looks rougher).
+- **Workspace, then StreamingEnabled:** either works. With streaming on, keep
+  `StreamingTargetRadius` at 1024 or more so the shaft and the next landing stay visible.
+  Relic and creature models stream as whole models. Prompts, markers, scans, and the HUD
+  tolerate streaming in and out; server state never depends on it.
+- **Lighting, then Technology:** ShadowMap or Future is recommended (not set by the
+  installer).
+- **Workspace, then FallenPartsDestroyHeight:** keep it at -500 or lower. The installer
+  warns if the world's kill plane (Y 40) would come too close.
+
+### Movement, camera, falls, places
+- **Camera:** player-controlled third person, zoom 0.5 to 140 studs, field of view 72, and
+  the default "Zoom" occlusion. There are no forced camera moves.
+- **Falls (provisional):** impacts above about an 18-stud drop hurt through the central
+  damage interface. A jump into the abyss from the rim downs you on the floor. Falls are
+  environmental, so town and camps do not prevent them.
+- **Void:** falling below the kill plane is a final death, placed at your last safe ground.
+- **HUD place line:** shows the region and depth in meters (for example
+  `Mistfall Camp · 70 m down`), never coordinates.
+- **Expedition:** leaving the paved town (stepping onto the gate landing) starts one.
+  Looking at town from below never counts as returning.
+
+### Art pass (proxies)
+The whole world, the relic forms, creature dressing, explorer gear, and poses are
+built-in-material proxies. See [`docs/ASSETS.md`](docs/ASSETS.md) for exactly what each is
+and what should replace it. No external assets were imported.
+
+## 6. Project layout
 
 ```
 default.project.json   Rojo mapping (shared / server / client only)
-rokit.toml             toolchain pin (Rojo 7.4.4)
+rokit.toml             toolchain pin (Rojo 7.4.4, Lune 0.11.0)
+tools/                 run-tests (Lune test harness), build-world (offline world build)
 licenses/              third-party licenses (ProfileStore, Apache-2.0)
-docs/                  design PDF, TESTING.md, DEPENDENCIES.md
+docs/                  design PDF, TESTING.md, DEPENDENCIES.md, ASSETS.md
 src/shared/            ReplicatedStorage.HollowboundShared
   Config.luau          all provisional values, labelled with design status
   LoadoutRules.luau    slot classes from Config (rarity -> Support / Exceptional)
@@ -407,17 +552,31 @@ src/server/            ServerScriptService.HollowboundServer
   Creatures.luau       creature bodies, perception, pathing, strikes, cleanup
   Encounters.luau      marker-driven spawns, guardian caches, rewards
   FieldActions.luau    Attack / Supply / Cancel requests (rate limited)
+  -- milestone 5 --
+  World/Layout.luau    authored, deterministic world data (places, route, markers)
+  World/Planner.luau   pure: layout -> part plan, route graph
+  World/Validate.luau  pure: markers, route, 3D zones, kill plane checks
+  World/Geometry.luau  pure vector math (matches CFrame.fromOrientation)
+  World/Installer.luau edit-mode installer (Command Bar), lighting preset and restore
+  WorldInfo.luau       active world, depth, regions, kill plane
+  Markers.luau         markers of the active world only
+  Reach.luau           distance + same level + clear line for interactions
+  Spawning.luau        rim-town spawn, camera zoom limits
+  Falls.luau, FallMath environmental fall damage (provisional) and the void
+  Poses.luau           server-timed procedural poses tied to action timings
+  Outfitter.luau       explorer gear on every avatar (cosmetic)
   Vendor/              ProfileStore (pinned, unmodified)
 src/client/            StarterPlayerScripts.HollowboundClient
   init.client.luau     wiring and requests
   Actions.luau         one action layer: keyboard, controller, touch
   Hud.luau             save badge, pack, loadout bar, relic menu, messages
   AbilityFx.luau       local-only ability feedback (Echo marks, Gust cue)
-  FieldHud.luau        health, supplies, downed and rescue display, warnings, Attack/Heal buttons
+  FieldHud.luau        place and depth, health, supplies, downed and rescue display, warnings, Attack/Heal buttons
+  WorldFx.luau         camera field of view, depth atmosphere, relic idle, landing feedback
   DevKeys.luau         Studio-only K / J / L test keys
 ```
 
-## 6. Design traceability
+## 7. Design traceability
 
 | Implemented behavior | Design status |
 |---|---|
@@ -442,7 +601,7 @@ src/client/            StarterPlayerScripts.HollowboundClient
 | Temporary departure rule | Prototype rule from the milestone 3 brief; final reconnect rules are Open |
 | Rarity tiers and thresholds | Open; placeholders |
 
-## 7. Not in this milestone
+## 8. Not in this milestone
 
 - Ranks and XP, food and ascent strain, ranged combat, crews, PvP, trading, currency,
   vendors, stashes, crafting, procedural depths, and the full reconnect system (bodies,

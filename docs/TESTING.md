@@ -13,6 +13,7 @@ This file has four kinds of tests. Keep them apart when you report results:
 | Part F | Milestone 4 solo playtest | Studio mock or real | Studio, 1 client |
 | Part G | Milestone 4 two-client checklist | Studio mock or real | Studio, 2-3 clients |
 | Part H | Device, console, and cloud checks | real | phones, controllers, published test experience |
+| Parts I-M | Milestone 5: automated world checks, install and save, solo acceptance, two-client, device and cloud | mixed | Lune, Studio edit mode, Studio play |
 
 Mock results never prove real saving. Only Part C does.
 
@@ -445,6 +446,10 @@ on real DataStores; they are covered by Part A's failure injection.
 
 # Milestone 4: the first dangerous PvE expedition
 
+Note (milestone 5): the guardian is now named **Rootwarden** in game, with construct
+dressing. Wherever this section says "Matriarch", expect "Rootwarden"; its behaviour is
+unchanged.
+
 Setup for every part below: **Test**, then **Start** (1 player for the solo script,
 **2 Players** for Part G). Mock storage (purple badge) is fine. The server Output should
 also show:
@@ -612,3 +617,120 @@ These were **not** run by the assistant:
   and telegraph dodging, revive across real network latency, server physics ownership of
   creatures, and saving and rejoining (Part C) with milestone 4 active.
 - Performance with the creature budget full (12) and several players.
+
+---
+
+# Milestone 5: the vertical world (in progress, not owner-tested)
+
+## Part I. Automated checks (no Studio needed)
+
+- [ ] `lune run tools/run-tests`: `World: N/N passed` plus every earlier suite, and
+      `Self-test finished: N/N passed`.
+- [ ] `lune run tools/build-world`: `problems 0`, the key-marker coordinates print, and it
+      writes `build/HollowboundWorld.rbxm`.
+
+| Requirement | Covered by |
+|---|---|
+| Required markers exactly once (spawn, terminal, service, supply, guardian and cache, relic spawns A-E) | Validate (World suite) |
+| Route connects gate, camp, ruins, and floor; no walkway steeper than 35 degrees; nothing near the kill plane | Validate |
+| 3D zones: shaft, under the terminal, under and above the camp are not protected; behind lodges is town; the gate landing starts an expedition | Validate, World |
+| Decor and background never collide or block raycasts (drops cannot land on scenery) | Validate |
+| Dens farther than their leash from camps | Validate |
+| Kill plane below the floor and above FallenPartsDestroyHeight | Validate |
+| Reinstalling twice: no duplicates; AuthoredDecor and unrelated models kept; one world model | World (isolated workspace) |
+| Lighting preset applied once; original Lighting and Atmosphere restored | World (Lune only) |
+| Fixture selection: vertical binds only the world's markers, legacy only the others | World |
+| Reach: same level and distance; below a terminal is refused | World |
+| Falls: jumps and short drops are free; a rim-to-floor jump downs | World |
+| Pure rotations match CFrame.fromOrientation | World |
+
+Not automatable here: Roblox physics, pathfinding on the real geometry, streaming, the
+camera, the look of the world, and real saving.
+
+## Part J. Install, reinstall, and save (Studio, edit mode)
+
+1. [ ] Open a **copy** of your place (or a new Baseplate place). Connect Rojo. Stay in edit
+       mode.
+2. [ ] In the Command Bar, run the install line from README "World installation". Output:
+       `World installed: 1187 parts in 36 groups, camp depth 236, 0 plan problem(s), 0
+       shaft blocker(s)`, then `Install OK`.
+3. [ ] In edit mode, `Workspace.HollowboundWorld` is visible from the camera: the town ring
+       around the opening, the shaft, and the floor below.
+4. [ ] Put a part inside `HollowboundWorld.AuthoredDecor` (for example a statue at the plaza).
+       Run the install line again. Output reports `1 authored item(s) kept`. The statue is
+       still there. The Explorer shows exactly one `TownSpawn`, one `RegistryTerminal`, and
+       three creature-spawn markers.
+5. [ ] Lighting: `Lighting.HollowboundLightingBackup` exists once (even after two installs).
+       Run `.restoreLighting()`: the old Lighting returns. Run `.install()` again to
+       re-apply.
+6. [ ] **Save the place** and reopen it: the world is still there in edit mode.
+7. [ ] Optional: delete the Baseplate's `SpawnLocation`, or leave it. Players still spawn at
+       the rim plaza.
+
+## Part K. Solo acceptance playtest (about 20 minutes)
+
+Play with **1 player**. Server Output shows `World mode: Vertical (installed m5-1)` and
+`Milestone 5 server ready (world: Vertical, ...)`. No legacy dev map or arena appears.
+
+1. [ ] You spawn on the **rim plaza** in town. The HUD place line reads `Rim Town`.
+2. [ ] Take supplies at the **Supply Depot**. At the **Registry Hall** terminal, the menu's
+       Appraise and Activate are available. Walk around the ring: lodges, towers, lanterns,
+       the crane, and the gate.
+3. [ ] Visit an **overlook**: you can see the town around the opening, the Elder Tree's
+       canopy, the waterfalls, and the floor far below.
+4. [ ] Walk through the **Descent Gate** onto its landing: the expedition starts and the
+       place line changes to the shaft and depth (for example `The Descent Gate`, then
+       `Upper Shaft · 10 m down`).
+5. [ ] Descend **without Windhook**: Gatestair ramps, the Overhang Shelf, the bridge head, the
+       Root Bridge, and the Elder Tree spiral to 236 deep. Cross to **Mistfall Camp**. The
+       label says camp and you take no creature or combat damage there. Relics stay
+       unsecured.
+6. [ ] Optional branch: the **Lantern Ruins** ledge (relics A, B).
+7. [ ] From camp, take the east ramps and the **scaffold stairs** to the floor. Nowhere do you
+       get stuck, need to jump a gap, or take fall damage.
+8. [ ] On the floor, the **Thornbacks** (furry, thorny) patrol their range. The **Rootwarden**
+       (stone construct with a glowing eye) guards the cache by the wall. Fight it using its
+       long recovery after each strike. The cache unlocks and the reward relic (engraved
+       stone, floating pieces, soft glow) appears. Pick it up.
+9. [ ] Echo Lens (if you have one) marks the reward and the floor relics. Windhook (if
+       activated) reaches the **sky ledge** (relic E). Without Windhook, you cannot jump up.
+10. [ ] **Ascend** with the relic: back up the scaffold stairs, the ramps, the camp bridge, the
+        spiral, the Root Bridge, and the Gatestair. Looking up at town from below does **not**
+        end the expedition. Stepping back onto the paved rim does (`Back in town...`).
+11. [ ] Register the relic at the terminal. The pack shows **REGISTERED**.
+12. [ ] Falls: drop off a short ledge (no damage). Jump from the rim into the shaft: you land
+        on the floor **downed**. A self-rescue kit or bleedout works as in milestone 4. Fall
+        into **the Lower Dark** pit: final death, with drops at your last safe ground (not in
+        the pit).
+13. [ ] Reach: stand on the ramp directly below the Registry terminal (through the rim
+        floor): no terminal, service, or desk use (`You need to be on the same level.`).
+14. [ ] Camera: zoom out far enough to see the next landing. The camera moves in front of
+        walls in tight spots and never swings on its own during combat.
+
+## Part L. Two-client checks
+
+Start **2 Players** in the vertical world.
+
+- [ ] Both spawn on the rim plaza. Services and creatures appear once (one terminal, two
+      Thornbacks, one Rootwarden).
+- [ ] Downed and revive on a ramp and on the Elder Tree walkway: the revive works, and creatures
+      do not follow into Mistfall Camp.
+- [ ] Final death on the floor: relics and a supplies crate drop on the floor (not in the
+      pit, not on canopies). The other player recovers them.
+- [ ] Contested guardian reward: one winner (as in milestone 4).
+- [ ] Charges, cooldowns, protected-relic service, and registration all work as before.
+- [ ] Streaming (if enabled): one player stays in town while the other goes to the floor and
+      back. Prompts, relic glow, creature models, and Echo marks appear and disappear
+      cleanly, with no duplicate prompts.
+- [ ] Regression: run milestones 1-4 Parts B and G quickly in the vertical world, then set
+      `Config.World.Mode = "Legacy"` and run Part F once to confirm the legacy fixtures
+      still work.
+
+## Part M. Only you can run these
+
+These were **not** run by the assistant:
+- Real persistence with milestone 5 active (Part C on a published test experience).
+- Real phones, tablets, and controllers: readability, touch reach, and frame rate in the
+  shaft. Emulation in Studio is not a performance test.
+- Performance on the full world (about 1,200 parts and 16 lights) on low-end devices, with
+  and without streaming.

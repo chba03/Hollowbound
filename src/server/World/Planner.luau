@@ -89,7 +89,7 @@ local function signExtra(text: string, height: number, color)
 					BackgroundTransparency = 1,
 					Text = text,
 					TextScaled = true,
-					Font = { enum = "Font", name = "GothamBold" },
+					FontFace = { font = "GothamBold" },
 					TextColor3 = { rgb = color or { 250, 240, 220 } },
 					TextStrokeTransparency = 0.4,
 				},

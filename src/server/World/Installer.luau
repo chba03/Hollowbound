@@ -62,6 +62,8 @@ local function convert(value)
 		return Vector2.new(value.v2[1], value.v2[2])
 	elseif value.enum then
 		return (Enum :: any)[value.enum][value.name]
+	elseif value.font then
+		return Font.fromEnum((Enum.Font :: any)[value.font])
 	elseif value.nrange then
 		return NumberRange.new(value.nrange[1], value.nrange[2])
 	elseif value.nseq then
@@ -137,7 +139,12 @@ function Installer.applyLighting(lighting: Instance, preset)
 		backup = Instance.new("Configuration")
 		backup.Name = BACKUP_NAME
 		for _, property in LIGHTING_PROPERTIES do
-			backup:SetAttribute(property, (lighting :: any)[property])
+			local ok, value = pcall(function()
+				return (lighting :: any)[property]
+			end)
+			if ok and value ~= nil then
+				backup:SetAttribute(property, value)
+			end
 		end
 		-- Only one Atmosphere can be active: keep any existing one safe in the backup.
 		for _, child in lighting:GetChildren() do

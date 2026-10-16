@@ -204,6 +204,7 @@ local function requireNode(node)
 			ColorSequence = roblox.ColorSequence,
 			Instance = roblox.Instance,
 			Enum = roblox.Enum,
+			Font = roblox.Font,
 		},
 	})
 	local result = chunk()

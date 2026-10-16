@@ -89,6 +89,29 @@ Proposed example or Open value as settled.
   from inside, and creatures inside cannot be damaged. Camps still never register, bank,
   recharge, or reset allowances. PvP aggressor/defender camp rules are documented for later.
 
+## Milestone 5 rules (in progress, from the owner's brief)
+- The world is authored data (`src/server/World/Layout.luau`), turned into a plan by the
+  pure `Planner`, checked by `Validate`, and built in **edit mode** by `Installer` (Command
+  Bar). Runtime never rebuilds it. The installer replaces only children of
+  `Workspace.HollowboundWorld` marked `HB_Generated`, keeps `AuthoredDecor`, never
+  touches other Workspace content or Terrain, and backs up Lighting before applying a
+  preset.
+- `WorldInfo.resolve()` picks the active world once (vertical if installed; legacy dev
+  map as a loud Studio fallback, or when `Config.World.Mode = "Legacy"`). Services bind
+  through `Markers` (active-world markers only). Do not use `CollectionService:GetTagged`
+  for static world markers.
+- Interactions use `Reach.check` (distance, same level, clear line). Zones are bounded
+  3D boxes; nothing below town or a camp counts as inside.
+- Every walkway on the ordinary route stays at or below 35 degrees, works both ways, and
+  needs no Windhook; Windhook only opens optional discoveries. Validate enforces this.
+- Decor and background parts never collide or block raycasts. The kill plane
+  (`Config.World.KillDepth`) feeds the existing final-death path once.
+- Falls (provisional) are environmental damage through `Vitals`; protected zones do not
+  cancel them.
+- Visuals are built-in-material proxies listed in `docs/ASSETS.md`. Never add asset IDs
+  without recorded creator, source, and permission. Cosmetics must not change hitboxes,
+  collision, reach, or AI.
+
 ## Architecture
 - `src/server`: authoritative. `RelicStore` is pure Luau, the live state, and never
   yields. Storage calls happen in the backend, never between a store check and its change.

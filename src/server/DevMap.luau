@@ -208,4 +208,47 @@ function DevMap.ensureServiceStation()
 	print("[Hollowbound] Built development service station next to the registration terminal.")
 end
 
+-- Adds pedestals RelicSpawnC, D, and E for the milestone 3 test specimens (Echo Lens and
+-- exceptional relics) as their own model, Workspace.HollowboundDevRelicFixtures, 15
+-- studs in front of pedestal A. It never edits the map or pedestals A and B, and it is
+-- skipped if any of those pedestal names already exist as tagged relic spawns.
+function DevMap.ensureRelicFixtures()
+	local existing = {}
+	local anchor
+	for _, part in CollectionService:GetTagged(Tags.RelicSpawn) do
+		existing[part.Name] = true
+		if part.Name == "RelicSpawnA" and part:IsA("BasePart") then
+			anchor = part
+		end
+	end
+	if existing.RelicSpawnC or existing.RelicSpawnD or existing.RelicSpawnE then
+		return
+	end
+	if not anchor then
+		warn("[Hollowbound] No RelicSpawnA found; milestone 3 relic fixtures not built.")
+		return
+	end
+
+	local model = Instance.new("Model")
+	model.Name = "HollowboundDevRelicFixtures"
+	local offsets = {
+		RelicSpawnC = Vector3.new(0, 0, 15),
+		RelicSpawnD = Vector3.new(15, 0, 15),
+		RelicSpawnE = Vector3.new(30, 0, 15),
+	}
+	for name, offset in offsets do
+		local pedestal = Instance.new("Part")
+		pedestal.Name = name
+		pedestal.Anchored = true
+		pedestal.Size = anchor.Size
+		pedestal.CFrame = anchor.CFrame + offset
+		pedestal.Color = Color3.fromRGB(70, 60, 85)
+		pedestal.Material = Enum.Material.Marble
+		pedestal.Parent = model
+		CollectionService:AddTag(pedestal, Tags.RelicSpawn)
+	end
+	model.Parent = workspace
+	print("[Hollowbound] Built development relic fixtures (pedestals C-E).")
+end
+
 return DevMap

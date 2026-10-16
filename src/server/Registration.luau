@@ -11,12 +11,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
 local Characters = require(script.Parent.Characters)
+local Guard = require(script.Parent.Guard)
 local RelicStore = require(script.Parent.RelicStore)
 local ServerNet = require(script.Parent.ServerNet)
 
 local Registration = {}
 
 local store
+local sessions
 
 local function describe(specimens): string
 	local names = {}
@@ -27,6 +29,11 @@ local function describe(specimens): string
 end
 
 function Registration.tryRegister(player: Player, terminal: BasePart)
+	local allowed, blocked = Guard.check(player)
+	if not allowed then
+		ServerNet.notify(player, blocked :: string, "error")
+		return
+	end
 	local root = Characters.liveRoot(player)
 	if not root then
 		return
@@ -42,9 +49,14 @@ function Registration.tryRegister(player: Player, terminal: BasePart)
 		return
 	end
 
+	-- Registration changes only `registered`: not traits, service, charges, appraisal,
+	-- or activation.
+	local function snapshot(specimen)
+		return `{RelicStore.fingerprint(specimen)}|{specimen.needsService}|{specimen.charges}|{specimen.appraised}|{specimen.activated}`
+	end
 	local before = {}
 	for _, specimen in carried do
-		before[specimen.id] = RelicStore.fingerprint(specimen)
+		before[specimen.id] = snapshot(specimen)
 	end
 
 	local newly, already = store:registerCarried(player.UserId)
@@ -52,18 +64,21 @@ function Registration.tryRegister(player: Player, terminal: BasePart)
 	-- Guard: registration must never change identity or traits.
 	for _, specimen in store:carried(player.UserId) do
 		assert(
-			RelicStore.fingerprint(specimen) == before[specimen.id],
-			"Registration changed specimen identity: " .. specimen.id
+			snapshot(specimen) == before[specimen.id],
+			"Registration changed specimen identity or state: " .. specimen.id
 		)
 	end
 	assert(#store:carried(player.UserId) == #carried, "Registration changed the number of carried relics")
 
 	if #newly > 0 then
-		ServerNet.notify(player, `Registered: {describe(newly)}. These relics are now secured.`, "success")
+		-- Registration itself is complete now. Saving is separate: the HUD's save badge
+		-- shows "Saving..." until storage confirms.
+		sessions:commit(player.UserId, true)
+		ServerNet.notify(player, `Registered: {describe(newly)}. Secured in town.`, "success")
 	else
 		ServerNet.notify(player, `Nothing new to register. Already registered: {describe(already)}.`, "info")
 	end
-	ServerNet.pushInventory(player)
+	ServerNet.pushState(player)
 
 	for _, specimen in newly do
 		print(`[Hollowbound] {player.Name} registered {RelicStore.fingerprint(specimen)}`)
@@ -90,8 +105,9 @@ local function attach(terminal: Instance)
 	end)
 end
 
-function Registration.start(theStore)
+function Registration.start(theStore, theSessions)
 	store = theStore
+	sessions = theSessions
 	for _, terminal in CollectionService:GetTagged(Config.Tags.RegistrationTerminal) do
 		attach(terminal)
 	end

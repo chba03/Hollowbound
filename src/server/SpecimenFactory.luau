@@ -8,6 +8,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
+local RelicDefs = require(script.Parent.RelicDefs)
 
 local SpecimenFactory = {}
 
@@ -56,11 +57,13 @@ function SpecimenFactory.create(typeId: string, qualityMin: number, qualityMax: 
 
 		-- Usability, restored by town service (repair/recharge) without touching traits.
 		condition = 1,
-		charge = 1,
+		charges = RelicDefs.maxCharges(typeId), -- ability uses left; 0 if the type has no ability
 
 		foundAt = nil :: number?,
 		registeredAt = nil :: number?,
 		servicedAt = nil :: number?,
+		appraisedAt = nil :: number?,
+		activatedAt = nil :: number?,
 	}
 end
 

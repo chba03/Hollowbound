@@ -16,6 +16,7 @@ local Shared = ReplicatedStorage:WaitForChild("HollowboundShared")
 local Config = require(Shared:WaitForChild("Config"))
 local Net = require(Shared:WaitForChild("Net"))
 local Characters = require(script.Parent.Characters)
+local Guard = require(script.Parent.Guard)
 local RelicStore = require(script.Parent.RelicStore)
 local ServerNet = require(script.Parent.ServerNet)
 local SpecimenFactory = require(script.Parent.SpecimenFactory)
@@ -80,6 +81,12 @@ function WorldRelics.tryPickup(player: Player, specimenId: any, source: string):
 		return false
 	end
 
+	local allowed, blocked = Guard.check(player)
+	if not allowed then
+		ServerNet.notify(player, blocked :: string, "error")
+		return false
+	end
+
 	local root = Characters.liveRoot(player)
 	if not root then
 		ServerNet.notify(player, "You need a living character to pick that up.", "error")
@@ -117,7 +124,7 @@ function WorldRelics.tryPickup(player: Player, specimenId: any, source: string):
 	local specimen = store:get(specimenId)
 	local name = Config.RelicTypes[specimen.typeId].displayName
 	ServerNet.notify(player, `Picked up {name} ({specimen.rarity}). Unsecured until registered in town.`, "success")
-	ServerNet.pushInventory(player)
+	ServerNet.pushState(player)
 	if Config.Dev.LogTraitsToServerOutput then
 		print(`[Hollowbound] {player.Name} picked up {RelicStore.identityAndStates(specimen)} via {source}`)
 	else
@@ -139,6 +146,35 @@ function WorldRelics.spawnDropped(specimen, position: Vector3): boolean
 	end
 	spawnWorldPart(specimen, position, true)
 	return true
+end
+
+-- Available world relics near a point, from the authoritative records: the specimen
+-- must be ownerless and in the world, with a live world part. Returns at most
+-- maxTargets entries, nearest first: { id, position, name, rarity } (no traits).
+function WorldRelics.availableNear(position: Vector3, radius: number, maxTargets: number)
+	local found = {}
+	for specimenId, part in partsById do
+		local specimen = store:get(specimenId)
+		if specimen and specimen.ownerUserId == nil and specimen.location == "World" and part.Parent then
+			local distance = (part.Position - position).Magnitude
+			if distance <= radius then
+				table.insert(found, {
+					id = specimenId,
+					position = part.Position,
+					distance = distance,
+					name = Config.RelicTypes[specimen.typeId].displayName,
+					rarity = specimen.rarity,
+				})
+			end
+		end
+	end
+	table.sort(found, function(a, b)
+		return a.distance < b.distance
+	end)
+	while #found > maxTargets do
+		table.remove(found)
+	end
+	return found
 end
 
 function WorldRelics.folder(): Folder

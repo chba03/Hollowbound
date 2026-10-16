@@ -1,10 +1,11 @@
 --[[
 	Town service station (repair/recharge). Any BasePart tagged Tags.ServiceStation gets
-	a prompt. The station clears Needs service on relics its user carries.
+	a prompt. The station clears Needs service and refills charges on relics its user
+	carries (repair and recharge).
 
 	The server checks that the player is alive, inside a town zone, and near the
 	station, and that each relic is owned, carried, and needs service. Service restores
-	condition and charge only. It never changes ID, traits, registration, appraisal, or
+	condition and charges only. It never changes ID, traits, registration, appraisal, or
 	activation, and never creates a new record.
 
 	Cost: Open. Service is free for testing (Config.Service.Price = 0). There is no
@@ -16,6 +17,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("HollowboundShared"):WaitForChild("Config"))
 local Characters = require(script.Parent.Characters)
+local Guard = require(script.Parent.Guard)
+local RelicDefs = require(script.Parent.RelicDefs)
 local RelicStore = require(script.Parent.RelicStore)
 local ServerNet = require(script.Parent.ServerNet)
 local Zones = require(script.Parent.Zones)
@@ -23,6 +26,7 @@ local Zones = require(script.Parent.Zones)
 local ServiceStation = {}
 
 local store
+local sessions
 
 local REJECTIONS = {
 	NotFound = "relic not found",
@@ -31,7 +35,19 @@ local REJECTIONS = {
 	NotNeeded = "already serviced",
 }
 
+-- A relic needs the station if it needs service, is worn, or is missing charges.
+local function wantsService(specimen): boolean
+	return specimen.needsService
+		or (specimen.condition or 0) < Config.Service.RestoredCondition
+		or (specimen.charges or 0) < RelicDefs.maxCharges(specimen.typeId)
+end
+
 function ServiceStation.tryService(player: Player, station: BasePart)
+	local allowed, blocked = Guard.check(player)
+	if not allowed then
+		ServerNet.notify(player, blocked :: string, "error")
+		return
+	end
 	local root = Characters.liveRoot(player)
 	if not root then
 		return
@@ -54,12 +70,12 @@ function ServiceStation.tryService(player: Player, station: BasePart)
 	local candidates = {}
 	for _, specimen in carried do
 		before[specimen.id] = RelicStore.identityAndStates(specimen)
-		if specimen.needsService then
+		if wantsService(specimen) then
 			table.insert(candidates, specimen)
 		end
 	end
 	if #candidates == 0 then
-		ServerNet.notify(player, "None of your relics need service.", "info")
+		ServerNet.notify(player, "None of your relics need service or recharging.", "info")
 		return
 	end
 
@@ -69,7 +85,7 @@ function ServiceStation.tryService(player: Player, station: BasePart)
 			player.UserId,
 			specimen.id,
 			Config.Service.RestoredCondition,
-			Config.Service.RestoredCharge
+			RelicDefs.maxCharges(specimen.typeId)
 		)
 		if ok then
 			table.insert(names, `{Config.RelicTypes[specimen.typeId].displayName} ({specimen.rarity})`)
@@ -88,9 +104,10 @@ function ServiceStation.tryService(player: Player, station: BasePart)
 	end
 
 	if #names > 0 then
-		ServerNet.notify(player, `Serviced: {table.concat(names, ", ")}. Condition and charge restored.`, "success")
+		sessions:commit(player.UserId, true)
+		ServerNet.notify(player, `Serviced: {table.concat(names, ", ")}. Condition and charges restored.`, "success")
 	end
-	ServerNet.pushInventory(player)
+	ServerNet.pushState(player)
 end
 
 local function attach(station: Instance)
@@ -110,8 +127,9 @@ local function attach(station: Instance)
 	end)
 end
 
-function ServiceStation.start(theStore)
+function ServiceStation.start(theStore, theSessions)
 	store = theStore
+	sessions = theSessions
 	for _, station in CollectionService:GetTagged(Config.Tags.ServiceStation) do
 		attach(station)
 	end

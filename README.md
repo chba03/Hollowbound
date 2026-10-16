@@ -1,12 +1,18 @@
-# Hollowbound: milestone 2
+# Hollowbound: milestone 3
 
-A small shared test place with relic pickup, an in-memory inventory, town
-registration, final death with dropped and protected relics, and town relic service.
-Built with Luau, Roblox Studio, and Rojo.
+A shared test place for the relic system: pickup and town registration, final death with
+dropped and protected relics, and town service. Milestone 3 adds **saved registered
+relics**, **appraisal and activation**, a **3-slot loadout**, and two working abilities
+(**Windhook** and **Echo Lens**), with keyboard, controller, and touch controls.
+Built with Luau, Roblox Studio, Rojo, and ProfileStore.
 
 Design source: [`docs/Hollowbound_Game_Design_v0_2.pdf`](docs/Hollowbound_Game_Design_v0_2.pdf).
 Core rules and the current milestone: [`CLAUDE.md`](CLAUDE.md).
-Manual tests: [`docs/TESTING.md`](docs/TESTING.md).
+Tests (mock, two-client Studio, and real persistence): [`docs/TESTING.md`](docs/TESTING.md).
+Third-party code: [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md).
+
+Branch: `feature/relic-systems` (from `feature/relic-recovery`). It does not include
+the separate `milestone-2` branch line.
 
 ---
 
@@ -25,15 +31,19 @@ You need **Roblox Studio** and **Rojo 7.4.4**. The version is pinned in `rokit.t
    ```
    Rokit reads `rokit.toml` and installs Rojo 7.4.4. Check it with `rojo --version`.
 
-You can instead download `rojo.exe` 7.4.4 directly from
-<https://github.com/rojo-rbx/rojo/releases> and put it on your PATH.
-
 **Rojo Studio plugin**
 ```bash
 rojo plugin install
 ```
-This installs the matching plugin into Studio. Restart Studio afterwards. You can also
-install the "Rojo" plugin from the Creator Store, as long as its version is 7.4.x.
+Restart Studio afterwards. A Creator Store "Rojo" plugin also works if it is version 7.4.x.
+
+`rokit install` also installs **Lune 0.11.0**, which runs the logic tests outside Studio:
+```bash
+lune run tools/run-tests
+```
+
+ProfileStore needs no install. It is vendored at `src/server/Vendor/ProfileStore.luau`,
+pinned and licensed as described in [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md).
 
 ## 2. Start a session
 
@@ -41,99 +51,191 @@ install the "Rojo" plugin from the Creator Store, as long as its version is 7.4.
    ```bash
    rojo serve
    ```
-   It prints `Rojo server listening on port 34872`. Leave it running.
-2. Open Roblox Studio. Choose **New**, then **Baseplate** (or open your own place file).
-3. Go to the **Plugins** tab, click **Rojo**, then click **Connect** (localhost:34872).
-   Rojo creates:
-   - `ReplicatedStorage.HollowboundShared` (Folder: Config, Net)
-   - `ServerScriptService.HollowboundServer` (Script, with server modules as children)
-   - `StarterPlayer.StarterPlayerScripts.HollowboundClient` (LocalScript, with Hud and DevKeys)
-4. **Save the place** (File, then Save to File As, for example `Hollowbound.rbxl`) so your
-   manual Workspace edits persist. Rojo does not store Workspace content.
-5. Go to the **Test** tab. In **Clients and Servers**, choose **2 Players**, then click
-   **Start**. Follow [`docs/TESTING.md`](docs/TESTING.md).
+   Leave it running (`Rojo server listening on port 34872`).
+2. Open Roblox Studio and open your test place (or **New**, then **Baseplate**).
+3. Go to **Plugins**, then **Rojo**, then **Connect**. Rojo creates:
+   - `ReplicatedStorage.HollowboundShared` (Config, Net, LoadoutRules)
+   - `ServerScriptService.HollowboundServer` (Script with server modules, `Tests`, `Vendor`)
+   - `StarterPlayer.StarterPlayerScripts.HollowboundClient` (LocalScript with Hud,
+     Actions, AbilityFx, DevKeys)
+4. Save the place. Rojo does not store Workspace content.
+5. Go to **Test**, then **Clients and Servers**, choose **2 Players**, and click **Start**.
+   Follow [`docs/TESTING.md`](docs/TESTING.md).
 
-To test alone, press **Play** (F5).
+### Storage mode in a playtest
+
+The top-left badge and the server Output show which storage is in use:
+
+| Badge | Meaning |
+|---|---|
+| `Saved` / `Saving...` (dark badge) | Real DataStores through ProfileStore. The place is published and **Enable Studio Access to API Services** is on. |
+| `MOCK STORAGE (nothing persists): ...` (purple badge) | Studio without API access. The game uses `ProfileStore.Mock` on purpose; nothing survives the playtest. Turn this off with `Config.Persistence.StudioMockWhenNoAccess = false`, which makes loading fail instead. |
+| Player kicked with "could not load your saved relics" | Loading failed. Nothing was changed, and no blank profile was used. |
+
+For real persistence checks, use a **separate published test experience** (see
+`docs/TESTING.md`, part C). DataStores belong to one experience, so test data never
+mixes with the real game.
 
 ### What Rojo touches
-The project file maps only the three folders above. Every service node sets
-`$ignoreUnknownInstances`, so Rojo leaves other scripts, models, and hand-built Workspace
-content alone. Rojo does not manage Workspace. Keep code in `src/` and edit it there,
-not in Studio: Rojo overwrites Studio edits to synced scripts.
+`default.project.json` maps only the three code folders. Every service node sets
+`$ignoreUnknownInstances`, so Rojo leaves other scripts, models, and Workspace content
+alone. It does not map Workspace, terrain, or lighting. Edit code in `src/`, not in Studio:
+Rojo overwrites Studio edits to synced scripts.
 
-## 3. What happens in a playtest
+## 3. How the relic system works
 
-| Step | Where | Notes |
+### States of a relic specimen
+Each specimen has a unique ID, a type, a rarity, and permanent traits. These are
+generated once on the server and never rerolled. The following states are separate and
+independent:
+
+| State | Changed by | Never changed by |
 |---|---|---|
-| Self-test | Server Output | Checks claim, registration, death, recovery, and service rules on a scratch store (Studio only). |
-| Placeholder map | `Workspace.HollowboundDevMap` at X=200 | Built at runtime in Studio only: town (spawn and terminal), camp, expedition area, and walkways. It is skipped if the map already exists or a part tagged `HB_RegistrationTerminal` already exists. |
-| Specimens | Expedition pedestals | Two Windhook specimens. ID (GUID) and traits are generated once per server start, with non-overlapping quality bands so their traits differ. |
-| Pickup | ProximityPrompt (E) | The server checks for a living character, distance (12 studs), that the relic is still in the world, and that nobody owns it. The claim runs without yielding, so one request wins. |
-| Inventory HUD | Top-right panel | Name, colored rarity, UNSECURED or REGISTERED, appraisal, activation, NEEDS SERVICE or Good condition, and a short ID. Traits are not sent. |
-| Camp | Grass square | Zone label and message only. Relic state never changes. |
-| Registration | Teal terminal in town | Marks carried relics registered in place, keeping the same record, ID, and traits. Repeats are reported without duplicating anything. Registration does not clear Needs service. |
-| Final death | Any character death | Handled once per character. Unregistered relics leave the inventory and drop as world pickups (prompt text ends in "dropped") with their owner cleared. Registered relics stay in the inventory, marked Needs service, and never enter the world. |
-| Recovery | Dropped orb, E | Same validation and claim as a first pickup. Anyone, including the previous owner, can recover it. ID, traits, appraisal, and activation are kept. |
-| Relic service | Wooden bench beside the terminal | Clears Needs service and restores condition and charge. The server checks the player is alive, in a town zone, within 14 studs, and owns and carries the relic. Free for testing. |
+| Owner | pickup or recovery; dropped on final death if unregistered | registration, appraisal, activation, service |
+| **Registered** (secured) | town registry terminal | appraisal, activation, service, death |
+| **Appraised** (traits visible to owner) | town appraisal | registration, activation, service, death |
+| **Activated** (usable, for types that need it) | town activation | registration, appraisal, service, death |
+| **Needs service** | set when a registered relic survives final death | registration, activation, appraisal |
+| **Charges** | ability use spends one; service refills to max | registration, activation, appraisal |
 
-**Final death in this milestone.** Any character death counts as final death, including
-Studio's Reset Character. The designed downed/revive stage (revival by another player, or
-a self-rescue item, before final death) comes in a later milestone. Dropped relics land
-at the death spot if there is solid ground beneath it. If the player died below the map,
-they land at the player's last grounded position, sampled every 0.5 s. Failing both,
-they land at the respawn point. Leaving the game does not drop relics, because disconnect
-rules are Open. Ordinary gear has no inventory yet; it will also be unprotected.
+### Controls
 
-**Service station placement.** In Studio, `DevMap.ensureServiceStation` builds
-`Workspace.HollowboundDevServiceStation` as a separate model, 8 studs from the first
-registration terminal, unless a part is already tagged `HB_ServiceStation`. It does not
-edit your map, including a saved copy of the dev map. A hand-built service station must
-stand inside a part tagged `HB_TownZone`.
+| Action | Keyboard / mouse | Controller | Touch |
+|---|---|---|---|
+| Use slot 1, 2, 3 | `1`, `2`, `3` or click the slot | D-pad left, up, right | tap the slot |
+| Open / close relic menu | `B` or the **Relics** button | D-pad down; **B button** closes | tap **Relics** |
+| Menu buttons (Equip, Unequip, Appraise, Activate) | click | move selection, press **A** | tap |
+| Pick up, register, service | hold `E` at the prompt | hold the prompt button (**X**) | tap the prompt |
 
-**Keeping the map:** the dev map exists only while a test runs. To keep and edit it, during
-a playtest select `Workspace.HollowboundDevMap`, copy it, stop the test, and paste it into
-Workspace. The bootstrap sees the existing map and does not build another. Tags survive
-copy and paste.
+All actions go through one action layer (`src/client/Actions.luau`). Nothing is
+keyboard-only, and nothing needs drag and drop. The HUD scales with screen height.
 
-**Using your own geometry:** tag parts with the names in `Config.Tags`:
-`HB_RegistrationTerminal`, `HB_ServiceStation`, `HB_TownZone`, `HB_CampZone`, and
-`HB_RelicSpawn`. Name relic
-spawns `RelicSpawnA` and `RelicSpawnB`. Use Studio's **Tag Editor** in the Model tab, or
-the Properties panel's Tags section.
+### What happens in a playtest
 
-**Dev keys (Studio only):** **K** sends a pickup request for the nearest orb that skips the
-prompt range, for out-of-range tests. **J** sends a request at the next 5-second
-server-time boundary, for simultaneous pickup or recovery tests from two windows. **L**
-kills your character, and the server then reports the same death twice more, to test
-duplicate protection. All of them use the normal server code paths. Turn them off with `Config.Dev.EnableDevRemotes = false`.
+| Feature | Where | Notes |
+|---|---|---|
+| Self-test | Server Output | Store, ability, and persistence rules on **mock storage only**. |
+| Placeholder map | `Workspace.HollowboundDevMap` at X=200 | Studio only, built at runtime (unchanged since milestone 1). |
+| Relic fixtures | `Workspace.HollowboundDevRelicFixtures` | Studio only: pedestals C, D, and E, 15 studs in front of pedestal A. A separate model; the map is not edited. |
+| Specimens | Pedestals A-E | A: Windhook (Common). B: Windhook (Rare). C: Echo Lens (Uncommon). D: Echo Lens (Exceptional). E: Windhook (Exceptional). Regenerated on each server start. |
+| Pickup | Prompt (E) | Server checks: profile loaded, living character, distance, availability, ownership. The claim never yields, so one request wins. |
+| Registration | Teal terminal in town | Registers carried relics in place and requests an immediate save. "Registered" is shown at once. The badge shows **Saving...** until storage confirms, then **Saved**. |
+| Appraise / Activate | Relic menu, at a terminal or service station in town | Free (provisional). Appraisal reveals the existing traits to the owner. Activation is needed only by types that require it (Windhook). |
+| Service | Wooden bench beside the terminal | Clears Needs service, restores condition, refills charges. Free (provisional). |
+| Loadout | Relic menu, then **Equip** and choose a slot | 3 slots, at most 1 Exceptional relic; Common, Uncommon, and Rare are Support. Swapping is allowed any time, including in danger. |
+| Windhook (Gust leap) | Use its slot | Short forward-and-upward push in the facing direction. Needs activation. |
+| Echo Lens (Echo pulse) | Use its slot | Marks nearby relics lying in the world, for you only. Works right after pickup. |
+| Final death | Any character death | Unregistered relics drop as the same specimens; registered relics stay, marked Needs service with charges emptied. Handled once per character. |
+
+### Provisional tuning (all in `src/shared/Config.luau`)
+
+| Value | Setting |
+|---|---|
+| Loadout | 3 slots; Exceptional limit 1 (`Config.Loadout`) |
+| Windhook | 3 charges; cooldown 6 s to 3 s (efficiency trait); forward speed 40 to 70 studs/s (reach trait, cap 80); upward speed 24 to 38 studs/s (carrying-strength trait, cap 45); push lasts 0.35 s |
+| Echo Lens | 4 charges; cooldown 12 s to 6 s (efficiency trait); radius 40 to 120 studs (scan-range trait); marks last 4 to 10 s (clarity trait); at most 12 marks |
+| Activation | Windhook requires town activation; Echo Lens works immediately (`requiresActivation`) |
+| Death | Protected relics return with condition 0 and charges 0 (`Config.Death`) |
+| Service, appraisal, activation | Free (`Config.Service.Price = 0`; costs are Open) |
+| Requests | At most 8 relic actions per second per player |
+
+Traits shape abilities through `{ trait, worst, best }` entries. A specimen's trait is
+normalized within its type's range. A missing trait uses the weakest value; it is never
+rerolled. Cooldowns are per player and per ability, and the deadlines are saved. Swapping
+slots, switching copies, dying, or rejoining does not reset them.
+
+### Saving (milestone 3)
+
+- **What is saved:** registered relics only (ID, owner, type, rarity, quality, traits,
+  appraisal, activation, Needs service, condition, charges, timestamps), the loadout
+  slots that hold registered relics, and ability cooldown deadlines. One profile per
+  UserId, session-locked, schema version 1. Key: `Player_<UserId>` in
+  `Config.Persistence.StoreName`.
+- **Never saved:** unregistered relics. Leaving cannot bank fresh loot, and a relic that
+  another player recovered is never recreated from an old profile.
+- **When:** registration, service, appraisal, and activation of a registered relic, and
+  death with protected relics, request an immediate save. Equip changes, ability use, and
+  cooldowns are saved on the next autosave (about 5 minutes) and when the player leaves.
+- **Safety:** gameplay changes are refused until the profile loads, and again if the
+  session moves to another server (that player is kicked with an explanation). A failed
+  load kicks the player without writing anything. Newer-schema data is refused, not
+  overwritten. Unreadable records are kept untouched. A save never deletes a
+  previously saved relic. Save confirmations only move forward, so late callbacks cannot
+  mark newer changes as saved.
+
+#### Temporary departure rule (prototype only)
+This is **not** the final reconnect design. Reconnect bodies and camp pause/resume are
+future work.
+- **Leaving outside town:** the final-death rules apply once, before cleanup.
+  Unregistered relics drop as world pickups; registered relics are saved needing
+  service.
+- **Leaving in town:** registered relics are saved as they are. Unregistered relics
+  cannot be saved, so they are released into the world where you stood.
+- **Whole-server shutdown** (Studio Stop, or a server closing): everyone is saved as is,
+  with no death penalties. Unregistered relics end with the server.
+- **Session lost to another server:** no penalties; that server owns the saved data.
+
+#### Crash-recovery limits
+- If a server crashes, changes since the last confirmed save are lost. The **Saved**
+  badge means storage confirmed it. **Saving...** and "Saves on autosave or leave" mean
+  it is not confirmed yet.
+- A crashed server's session lock is released by ProfileStore after about 10 minutes
+  (`ASSUME_DEAD`), or sooner when another server takes it over (about 40 s). Until then,
+  a rejoin waits.
+- Unregistered relics are never saved, so a crash loses them.
+- Profile locking protects one player's profile. It is **not** a trading transaction
+  system; cross-player trades would need their own atomic design.
+
+**Using your own geometry:** tag parts with `HB_RegistrationTerminal`,
+`HB_ServiceStation`, `HB_TownZone`, `HB_CampZone`, and `HB_RelicSpawn` (spawns named
+`RelicSpawnA`-`E`).
+
+**Dev keys (Studio only):** **K** sends a pickup request ignoring the prompt range.
+**J** sends a timed pickup (race test). **L** kills your character and reports the death
+two extra times. Turn them off with `Config.Dev.EnableDevRemotes = false`.
 
 ## 4. Project layout
 
 ```
 default.project.json   Rojo mapping (shared / server / client only)
 rokit.toml             toolchain pin (Rojo 7.4.4)
+licenses/              third-party licenses (ProfileStore, Apache-2.0)
+docs/                  design PDF, TESTING.md, DEPENDENCIES.md
 src/shared/            ReplicatedStorage.HollowboundShared
   Config.luau          all provisional values, labelled with design status
+  LoadoutRules.luau    slot classes from Config (rarity -> Support / Exceptional)
   Net.luau             remote names
 src/server/            ServerScriptService.HollowboundServer
-  init.server.luau     startup order
-  RelicStore.luau      specimens, inventories, claim, register, death, service (pure, no yields)
-  SpecimenFactory.luau one-time ID + permanent (frozen) trait generation
+  init.server.luau     startup, player load, departure, shutdown
+  RelicStore.luau      live state: specimens, inventories, loadouts (pure, never yields)
+  SpecimenFactory.luau one-time ID and permanent trait generation
+  SpecimenCodec.luau   saved record <-> specimen, deterministic migration
+  Sessions.luau        saved sessions: gate, commit, confirm, depart, lost session
+  ProfileBackend.luau  ProfileStore adapter (real storage; explicit Studio mock)
+  MockBackend.luau     TEST-ONLY in-memory backend with failure injection
+  Guard.luau           "may this player change anything now?"
+  RelicDefs.luau       lookups over relic types and abilities
+  AbilityRules.luau    use checks, charges, cooldowns, trait tuning
+  Abilities.luau       Windhook push and Echo pulse effects
+  RelicActions.luau    validated client requests: equip, unequip, use, appraise, activate
   RelicView.luau       what a client may see; traits only after appraisal
-  WorldRelics.luau     spawning orbs, pickup validation
-  Registration.luau    town terminal
-  Defeat.luau          final death: drop unregistered, protect registered, drop placement
-  ServiceStation.luau  town repair/recharge clearing Needs service
-  Zones.luau           Town / Camp / Depths attribute; camp never touches relics
-  ServerNet.luau       remotes, inventory push, notifications
+  WorldRelics.luau     world orbs, pickup validation, nearby-relic query
+  Registration.luau    town registry terminal
+  ServiceStation.luau  town repair and recharge
+  Defeat.luau          final death and the temporary departure rule
+  Zones.luau           Town / Camp / Depths, and the town-desk check
+  ServerNet.luau       remotes, state push, notifications
   Characters.luau      living-character check
-  DevMap.luau          Studio-only placeholder geometry and service station
-  SelfTest.luau        Studio-only rule checks
+  DevMap.luau          Studio-only geometry, service station, relic fixtures
+  SelfTest.luau        Studio-only test runner (mock storage)
+  Tests/               StoreTests, AbilityTests, PersistenceTests, TestKit
+  Vendor/              ProfileStore (pinned, unmodified)
 src/client/            StarterPlayerScripts.HollowboundClient
-  init.client.luau     wiring
-  Hud.luau             pack panel, zone label, messages
+  init.client.luau     wiring and requests
+  Actions.luau         one action layer: keyboard, controller, touch
+  Hud.luau             save badge, pack, loadout bar, relic menu, messages
+  AbilityFx.luau       local-only ability feedback (Echo marks, Gust cue)
   DevKeys.luau         Studio-only K / J / L test keys
-docs/                  design PDF, test checklist
 ```
 
 ## 5. Design traceability
@@ -143,27 +245,21 @@ docs/                  design PDF, test checklist
 | Pickup establishes ownership; no crew pooling | Decided |
 | Town secures relics; camp is refuge only | Decided |
 | Unique specimens with permanent traits; repair and recharge preserve traits | Decided |
-| Appraisal, activation, registration, and service are separate states | Decided/Delegated |
-| Final death drops unregistered relics; registered relics return needing repair or recharge | Decided |
-| Downed state, revive, and self-rescue before final death | Decided; not yet implemented |
-| How worn a protected relic returns (condition and charge 0) | Open. Placeholder in `Config.Death`. |
-| Free town service | Open. Provisional testing choice (`Config.Service.Price = 0`). |
-| Drop placement (death spot, then last grounded position, then respawn) | Implementation choice; not specified by the design |
-| Type and rarity visible on pickup; traits revealed by appraisal | Delegated |
-| Windhook as the test relic; its trait names (reach, carrying strength, efficiency) | Proposed example. Used provisionally. |
-| Rarity tiers Common, Uncommon, Rare, Exceptional, and their thresholds | Open. Placeholders in `Config`. |
-| All distances, hold times, and quality bands | Open. Placeholders in `Config`. |
+| Appraisal reveals, activation enables, registration protects: separate states | Decided / Delegated |
+| Free appraisal in town; traits visible to the owner once appraised | Delegated |
+| Activation varies by relic (Windhook needs it; Echo Lens does not) | Decided (rule) / milestone 3 brief (which types) |
+| One exceptional relic plus support relics | Decided; 3 slots is a provisional test layout (Open) |
+| Classify by the specimen's actual rarity | Proposed in the design record, used here |
+| Windhook and Echo Lens abilities, charges, cooldowns, and numbers | Proposed examples; all tuning is Open |
+| Final death drops unregistered relics; registered relics return needing service | Decided |
+| Downed/revive before final death | Decided; not yet implemented |
+| Free service, appraisal, and activation | Open; provisional testing choice |
+| Temporary departure rule | Prototype rule from the milestone 3 brief; final reconnect rules are Open |
+| Rarity tiers and thresholds | Open; placeholders |
 
 ## 6. Not in this milestone
 
-- **Persistence:** all data lives in server memory and is lost when the server stops.
-  DataStore saving is a later milestone. Rejoining the same running server keeps your
-  relics, because records are keyed by UserId.
-- **Downed and revive stage**, self-rescue items, body looting, finishing a downed player,
-  and disconnect rules. Every death is currently final.
-- **Ordinary gear inventory**, including weapons, armour, tools, supplies, and materials.
-  It will drop on final death like unregistered relics.
-- **Service costs and materials.** Service is free for testing.
-- Appraisal and activation flows, relic abilities, combat and creatures, crews, PvP and
-  camp aggression timers, trading, ranks and XP, procedural terrain, and visible carrying
-  of exceptional finds.
+- Ranks, currency, costs, trading, creatures and combat, downed/revive, procedural
+  world generation, and the full reconnect system (bodies, camp pause/resume).
+- Ordinary gear inventory (it will drop on final death like unregistered relics).
+- Visible carrying of exceptional finds.

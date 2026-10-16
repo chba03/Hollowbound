@@ -12,10 +12,18 @@
 	reported. Respawning creates a new character, which is watched separately.
 
 	Later milestones: the designed downed/revive stage (a defeated player can be revived
-	or use a self-rescue item before final death), ordinary carried gear, body looting,
-	and disconnect rules. For now, any character death counts as final death, including
-	Studio's Reset Character. Leaving the game does not drop relics, because disconnect
-	rules are Open.
+	or use a self-rescue item before final death), ordinary carried gear, and body
+	looting. For now, any character death counts as final death, including Studio's
+	Reset Character.
+
+	TEMPORARY departure rule (private prototype, milestone 3; NOT the final reconnect
+	design, which will add reconnect bodies and camp pause/resume):
+	  - Leaving outside town applies the final-death rules once, before cleanup.
+	  - Leaving in town keeps registered relics as they are. Unregistered relics cannot
+	    be saved, so they are released into the world where the player stood.
+	  - A known whole-server shutdown applies no penalties: Sessions saves everyone as is.
+	  - A lost session (profile taken by another server) applies no penalties: its
+	    registered relics already left this server; unregistered ones are released.
 ]]
 
 local Players = game:GetService("Players")
@@ -24,6 +32,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("HollowboundShared")
 local Config = require(Shared:WaitForChild("Config"))
 local Net = require(Shared:WaitForChild("Net"))
+local Abilities = require(script.Parent.Abilities)
+local Guard = require(script.Parent.Guard)
 local RelicStore = require(script.Parent.RelicStore)
 local ServerNet = require(script.Parent.ServerNet)
 local WorldRelics = require(script.Parent.WorldRelics)
@@ -31,6 +41,7 @@ local WorldRelics = require(script.Parent.WorldRelics)
 local Defeat = {}
 
 local store
+local departedPlayers: { [Player]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 local handledCharacters: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 local lastSafePosition: { [Player]: Vector3 } = {}
 
@@ -102,28 +113,35 @@ local function describe(specimens): string
 	return table.concat(names, ", ")
 end
 
--- Returns true if this call processed the death, or false for a duplicate.
--- Does not yield, so no pickup can run in the middle of it.
-function Defeat.handleDeath(player: Player, character: Model, source: string): boolean
-	if handledCharacters[character] then
-		print(`[Hollowbound] Ignored duplicate death for {player.Name} ({source})`)
-		return false
+local function placeInWorld(player: Player, specimens, position: Vector3?, verb: string)
+	if #specimens == 0 then
+		return
 	end
-	handledCharacters[character] = true
+	local center, method = dropCenter(player, position)
+	local positions = dropPositions(center, #specimens)
+	for i, specimen in specimens do
+		WorldRelics.spawnDropped(specimen, positions[i])
+		print(`[Hollowbound] {player.Name} {verb} {RelicStore.identityAndStates(specimen)} at {method}`)
+	end
+end
 
-	local root = character:FindFirstChild("HumanoidRootPart")
-	local deathPosition = if root and root:IsA("BasePart") then root.Position else nil
-
+-- The final-death rules for one player. Shared by character death and the temporary
+-- field-departure rule. Does not yield, so no pickup can run in the middle of it.
+-- saveNow: request an immediate save (a death in play). A departure skips it because
+-- ending the session saves right after.
+local function applyFinalDeath(player: Player, position: Vector3?, source: string, saveNow: boolean)
 	local before = {}
 	for _, specimen in store:carried(player.UserId) do
 		before[specimen.id] = RelicStore.identityAndStates(specimen)
 	end
 
-	local dropped, protected = store:processDeath(
+	local dropped, protected, unequipped = store:processDeath(
 		player.UserId,
 		Config.Death.ProtectedConditionAfterDeath,
-		Config.Death.ProtectedChargeAfterDeath
+		Config.Death.ProtectedChargesAfterDeath
 	)
+	Abilities.endEffectsFor(player.UserId, unequipped)
+	Abilities.endAll(player.UserId)
 
 	-- Guard: death must never change identity, traits, or the separate states.
 	for _, specimen in dropped do
@@ -133,13 +151,11 @@ function Defeat.handleDeath(player: Player, character: Model, source: string): b
 		assert(RelicStore.identityAndStates(specimen) == before[specimen.id], "Death changed protected relic " .. specimen.id)
 	end
 
-	if #dropped > 0 then
-		local center, method = dropCenter(player, deathPosition)
-		local positions = dropPositions(center, #dropped)
-		for i, specimen in dropped do
-			WorldRelics.spawnDropped(specimen, positions[i])
-			print(`[Hollowbound] {player.Name} dropped {RelicStore.identityAndStates(specimen)} at {method}`)
-		end
+	placeInWorld(player, dropped, position, "dropped")
+	-- Protected relics changed (Needs service): save now so rejoining cannot dodge it.
+	local sessions = Guard.sessions()
+	if sessions and #protected > 0 then
+		sessions:commit(player.UserId, saveNow)
 	end
 	for _, specimen in protected do
 		print(`[Hollowbound] {player.Name} kept registered {specimen.id}; needs service`)
@@ -149,8 +165,58 @@ function Defeat.handleDeath(player: Player, character: Model, source: string): b
 	if #dropped > 0 then
 		ServerNet.notify(player, `You dropped: {describe(dropped)}. Unregistered relics can be recovered by anyone.`, "error")
 	end
-	ServerNet.pushInventory(player)
+	ServerNet.pushState(player)
+end
+
+-- Returns true if this call processed the death, or false for a duplicate.
+function Defeat.handleDeath(player: Player, character: Model, source: string): boolean
+	if handledCharacters[character] then
+		print(`[Hollowbound] Ignored duplicate death for {player.Name} ({source})`)
+		return false
+	end
+	handledCharacters[character] = true
+
+	local root = character:FindFirstChild("HumanoidRootPart")
+	local deathPosition = if root and root:IsA("BasePart") then root.Position else nil
+	applyFinalDeath(player, deathPosition, source, true)
 	return true
+end
+
+--[[
+	Temporary departure rule, applied once per player before Sessions saves and cleans up.
+	mode: "Field" (left outside town), "Town", "Shutdown", "Lost" (session taken by
+	another server), or "NotLoaded" (left before the profile loaded).
+]]
+function Defeat.handleDeparture(player: Player, mode: string)
+	if departedPlayers[player] then
+		return
+	end
+	departedPlayers[player] = true
+
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local position = if root and root:IsA("BasePart") then root.Position else nil
+	local alreadyDead = character ~= nil and handledCharacters[character] == true
+
+	if mode == "Field" then
+		if alreadyDead then
+			-- This character's final death was already applied; do not apply it twice.
+			print(`[Hollowbound] {player.Name} left while defeated; death already applied`)
+		else
+			if character then
+				handledCharacters[character] = true
+			end
+			applyFinalDeath(player, position, "left outside town", false)
+		end
+	elseif mode ~= "Shutdown" then
+		local released, unequipped = store:releaseUnregistered(player.UserId)
+		Abilities.endEffectsFor(player.UserId, unequipped)
+		placeInWorld(player, released, position, "left behind")
+		print(`[Hollowbound] {player.Name} left ({mode}): {#released} unregistered relic(s) released, no penalties`)
+	else
+		print(`[Hollowbound] {player.Name} left during shutdown: saved as is, no penalties`)
+	end
+	Abilities.endAll(player.UserId)
 end
 
 local function watchCharacter(player: Player, character: Model)
@@ -163,7 +229,7 @@ local function watchCharacter(player: Player, character: Model)
 	end)
 
 	-- Respawn: protected relics are still in the inventory.
-	ServerNet.pushInventory(player)
+	ServerNet.pushState(player)
 	local waiting = 0
 	for _, specimen in store:carried(player.UserId) do
 		if specimen.needsService then
@@ -204,7 +270,10 @@ function Defeat.start(theStore)
 		watchPlayer(player)
 	end
 	Players.PlayerRemoving:Connect(function(player)
-		lastSafePosition[player] = nil
+		-- Deferred: the departure rule still needs the last safe position.
+		task.defer(function()
+			lastSafePosition[player] = nil
+		end)
 	end)
 
 	-- Record a recent grounded position, used when a player dies below the map.

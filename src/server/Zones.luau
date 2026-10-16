@@ -39,6 +39,27 @@ function Zones.zoneAt(position: Vector3): string
 	return "Depths"
 end
 
+-- Town desk: inside a town zone and near a registry terminal or service station.
+-- Appraisal and activation require this; it is always computed fresh on the server.
+function Zones.atDesk(position: Vector3): boolean
+	if Zones.zoneAt(position) ~= "Town" then
+		return false
+	end
+	for _, tag in { Config.Tags.RegistrationTerminal, Config.Tags.ServiceStation } do
+		for _, part in CollectionService:GetTagged(tag) do
+			if part:IsA("BasePart") and (part.Position - position).Magnitude <= Config.TownDesk.ServerMaxDistance then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+function Zones.playerAtDesk(player: Player): boolean
+	local root = Characters.liveRoot(player)
+	return root ~= nil and Zones.atDesk(root.Position)
+end
+
 local function unsecuredCount(store, player: Player): number
 	local count = 0
 	for _, specimen in store:carried(player.UserId) do
@@ -58,6 +79,13 @@ function Zones.start(store)
 				if not root then
 					continue
 				end
+				-- The HUD enables Appraise/Activate buttons from this; the server re-checks.
+				local atDesk = Zones.atDesk(root.Position)
+				if player:GetAttribute("HB_AtDesk") ~= atDesk then
+					player:SetAttribute("HB_AtDesk", atDesk)
+					ServerNet.pushState(player)
+				end
+
 				local zone = Zones.zoneAt(root.Position)
 				if player:GetAttribute("HB_Zone") == zone then
 					continue
